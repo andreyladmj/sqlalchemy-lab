@@ -1,0 +1,55 @@
+SELECT dash_dashboard.dashboard_id AS dash_dashboard_dashboard_id,
+dash_dashboard.url AS dash_dashboard_url,
+dash_dashboard.description AS dash_dashboard_description \n
+
+FROM dash_dashboard \n
+WHERE dash_dashboard.url = %(url_1)s \n
+LIMIT %(param_1)s', '
+
+
+SELECT dash_dashboard_board.board_id AS dash_dashboard_board_board_id,
+dash_dashboard_board.name AS dash_dashboard_board_name,
+dash_dashboard_board.model_tag AS dash_dashboard_board_model_tag,
+dash_dashboard_board.description AS dash_dashboard_board_description,
+dash_dashboard_board.is_active AS dash_dashboard_board_is_active,
+dash_dashboard_board.date_created AS dash_dashboard_board_date_created,
+
+    (
+    SELECT count(*) AS count_1 \nFROM dash_user_board_view_log \nWHERE dash_dashboard_board.model_tag = dash_user_board_view_log.board_name AND dash_user_board_view_log.date_view > %(date_view_1)s AND dash_user_board_view_log.dashboard_id = %(dashboard_id_1)s ORDER BY dash_user_board_view_log.date_view DESC) AS view_count,
+
+
+    (
+    SELECT dash_user_board_view_log.date_view \n
+    FROM dash_user_board_view_log \n
+
+    WHERE dash_dashboard_board.model_tag = dash_user_board_view_log.board_name
+        AND dash_user_board_view_log.dashboard_id = %(dashboard_id_2)s
+        AND dash_user_board_view_log.user_id NOT IN (SELECT dash_user.user_id AS dash_user_user_id \nFROM dash_user \nWHERE dash_user.access_level_id != %(access_level_id_1)s) ORDER BY dash_user_board_view_log.date_view DESC \n LIMIT %(param_1)s) AS last_view, dash_dashboard_1.dashboard_id AS dash_dashboard_1_dashboard_id, dash_dashboard_1.url AS dash_dashboard_1_url, dash_dashboard_1.description AS dash_dashboard_1_description, dash_access_level_1.access_level_id AS dash_access_level_1_access_level_id, dash_access_level_1.description AS dash_access_level_1_description, dash_user_1.user_id AS dash_user_1_user_id, dash_user_1.username AS dash_user_1_username, dash_user_1.password AS dash_user_1_password, dash_user_1.access_level_id AS dash_user_1_access_level_id, dash_user_1.is_active AS dash_user_1_is_active, dash_user_board_access_1.id AS dash_user_board_access_1_id, dash_user_board_access_1.user_id AS dash_user_board_access_1_user_id, dash_user_board_access_1.dashboard_id AS dash_user_board_access_1_dashboard_id, dash_user_board_access_1.board_id AS dash_user_board_access_1_board_id \nFROM dash_dashboard_board LEFT OUTER JOIN dash_user_board_access AS dash_user_board_access_1 ON dash_dashboard_board.board_id = dash_user_board_access_1.board_id LEFT OUTER JOIN dash_dashboard AS dash_dashboard_1 ON dash_dashboard_1.dashboard_id = dash_user_board_access_1.dashboard_id LEFT OUTER JOIN dash_user AS dash_user_1 ON dash_user_1.user_id = dash_user_board_access_1.user_id LEFT OUTER JOIN dash_access_level AS dash_access_level_1 ON dash_access_level_1.access_level_id = dash_user_1.access_level_id
+
+
+
+
+
+SELECT dash_user.user_id AS dash_user_user_id, dash_user.username AS dash_user_username, dash_user.password AS dash_user_password, dash_user.access_level_id AS dash_user_access_level_id, dash_user.is_active AS dash_user_is_active, dash_access_level_1.access_level_id AS dash_access_level_1_access_level_id, dash_access_level_1.description AS dash_access_level_1_description, dash_dashboard_1.dashboard_id AS dash_dashboard_1_dashboard_id, dash_dashboard_1.url AS dash_dashboard_1_url, dash_dashboard_1.description AS dash_dashboard_1_description, dash_dashboard_board_1.board_id AS dash_dashboard_board_1_board_id, dash_dashboard_board_1.name AS dash_dashboard_board_1_name, dash_dashboard_board_1.model_tag AS dash_dashboard_board_1_model_tag, dash_dashboard_board_1.description AS dash_dashboard_board_1_description, dash_dashboard_board_1.is_active AS dash_dashboard_board_1_is_active, dash_dashboard_board_1.date_created AS dash_dashboard_board_1_date_created, dash_user_board_access_1.id AS dash_user_board_access_1_id, dash_user_board_access_1.user_id AS dash_user_board_access_1_user_id, dash_user_board_access_1.dashboard_id AS dash_user_board_access_1_dashboard_id, dash_user_board_access_1.board_id AS dash_user_board_access_1_board_id
+FROM dash_user
+LEFT OUTER JOIN dash_access_level AS dash_access_level_1 ON dash_access_level_1.access_level_id = dash_user.access_level_id
+LEFT OUTER JOIN dash_user_board_access AS dash_user_board_access_1 ON dash_user.user_id = dash_user_board_access_1.user_id
+LEFT OUTER JOIN dash_dashboard AS dash_dashboard_1 ON dash_dashboard_1.dashboard_id = dash_user_board_access_1.dashboard_id
+LEFT OUTER JOIN dash_dashboard_board AS dash_dashboard_board_1 ON dash_dashboard_board_1.board_id = dash_user_board_access_1.board_id ORDER BY dash_user.user_id
+
+
+
+
+
+
+SELECT dash_user_board_access.id AS dash_user_board_access_id,
+dash_user_board_access.user_id AS dash_user_board_access_user_id,
+dash_user_board_access.dashboard_id AS dash_user_board_access_dashboard_id,
+dash_user_board_access.board_id AS dash_user_board_access_board_id
+
+FROM dash_user_board_access
+INNER JOIN dash_dashboard_board ON dash_dashboard_board.board_id = dash_user_board_access.board_id
+
+WHERE dash_user_board_access.dashboard_id = 2
+    AND dash_user_board_access.user_id = 13
+    AND dash_user_board_access.board_id IS NOT NULL
