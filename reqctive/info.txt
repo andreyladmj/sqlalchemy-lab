@@ -1,0 +1,43 @@
+React
+https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
+https://www.safaribooksonline.com/library/view/hands-on-reactive-programming/9781789138726/
+https://www.safaribooksonline.com/library/view/reactive-web-applications/9781633430099/
+
+
+Expert Python Project
+https://www.safaribooksonline.com/videos/learning-path-expert/9781787123564?autoplay=false
+
+Python microservices
+https://www.safaribooksonline.com/library/view/python-microservices-development/9781785881114/
+
+Modern Python cookbook
+https://www.safaribooksonline.com/library/view/modern-python-cookbook/9781786469250/
+
+Python Design Patterns
+https://www.safaribooksonline.com/videos/python-design-patterns/9781786460677?autoplay=false
+
+
+Tornado
+https://www.oreilly.com/library/view/introduction-to-tornado/9781449312787/ 1 1 1 1 1
+https://www.oreilly.com/library/view/reactive-programming-in/9781786460332/
+
+AsyncIO
+https://www.oreilly.com/library/view/using-asyncio-in/9781491999691/
+
+
+COncurency
+https://www.safaribooksonline.com/library/view/learning-concurrency-in/9781787285378/
+https://www.safaribooksonline.com/library/view/mastering-concurrency-in/9781789343052/
+
+
+VERY GOOD course about python ! !!! !  !
+https://www.safaribooksonline.com/videos/python-programming-language/9780134217314
+
+FLUENT !
+https://www.safaribooksonline.com/library/view/fluent-python/9781491946237/
+
+Networking
+https://www.safaribooksonline.com/library/view/mastering-python-for/9781788992510/
+
+Performance
+https://www.safaribooksonline.com/library/view/python-high-performance/9781787282896/
