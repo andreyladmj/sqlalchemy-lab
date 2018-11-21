@@ -32,8 +32,11 @@ Observable.range(1, 10) \
 
 # input('POU\n')
 
-Observable.interval(1000) \
+disposable = Observable.interval(1000) \
     .map(lambda i: i * 100) \
     .observe_on(pool_scheduler) \
     .map(lambda s: intense_calculation(s)) \
     .subscribe(on_next=lambda i: print("Process 3: {0} {1}".format(current_thread().name, i)))
+
+
+disposable.dispose()

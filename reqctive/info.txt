@@ -1,5 +1,5 @@
 React
-https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
+2 https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
 https://www.safaribooksonline.com/library/view/hands-on-reactive-programming/9781789138726/
 https://www.safaribooksonline.com/library/view/reactive-web-applications/9781633430099/
 
@@ -18,7 +18,7 @@ https://www.safaribooksonline.com/videos/python-design-patterns/9781786460677?au
 
 
 Tornado
-https://www.oreilly.com/library/view/introduction-to-tornado/9781449312787/ 1 1 1 1 1
+1 https://www.oreilly.com/library/view/introduction-to-tornado/9781449312787/ 1 1 1 1 1
 https://www.oreilly.com/library/view/reactive-programming-in/9781786460332/
 
 AsyncIO
@@ -31,7 +31,7 @@ https://www.safaribooksonline.com/library/view/mastering-concurrency-in/97817893
 
 
 VERY GOOD course about python ! !!! !  !
-https://www.safaribooksonline.com/videos/python-programming-language/9780134217314
+3 https://www.safaribooksonline.com/videos/python-programming-language/9780134217314
 
 FLUENT !
 https://www.safaribooksonline.com/library/view/fluent-python/9781491946237/
