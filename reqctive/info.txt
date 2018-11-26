@@ -1,3 +1,7 @@
+https://www.safaribooksonline.com/library/view/mastering-python-for/9781788992510/
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/ - ~!!!!!!!!!!!!!!!!!!!! - SECOND EDITION
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781784397005/ - !!!!!!!!!!!!!!!!!!!1
+
 React
 2 https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
 https://www.safaribooksonline.com/library/view/hands-on-reactive-programming/9781789138726/
@@ -41,3 +45,9 @@ https://www.safaribooksonline.com/library/view/mastering-python-for/978178899251
 
 Performance
 https://www.safaribooksonline.com/library/view/python-high-performance/9781787282896/
+
+
+
+https://www.safaribooksonline.com/library/view/mastering-python-for/9781788992510/
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/ - ~!!!!!!!!!!!!!!!!!!!! - SECOND EDITION
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781784397005/ - !!!!!!!!!!!!!!!!!!!1
