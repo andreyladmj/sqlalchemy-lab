@@ -12,7 +12,27 @@ def subscribe_group_observable(group_observable):
     group_observable.count().subscribe(print_count)
 
 if __name__ == '__main__':
-    groups = Observable.from_(range(3)).group_by(key_selector)
-    print(groups)
-    groups.subscribe(subscribe_group_observable)
-    input("\n")
+    # groups = Observable.from_(range(3)).group_by(key_selector)
+    # print(groups)
+    # groups.subscribe(subscribe_group_observable)
+    # input("\n")
+    Observable.from_([
+        {'cat': 1, 'items': 2},
+        {'cat': 2, 'items': 1},
+        {'cat': 3, 'items': 4},
+        {'cat': 1, 'items': 1},
+        {'cat': 2, 'items': 4},
+    # ]).map(lambda t: Observable.just(t).group_by(lambda d: d['cat']).map(lambda d: d.sum(lambda d: d['items'])).flat_map(lambda d: d))\
+    ])\
+        .group_by(lambda d: d['cat'])\
+        .map(lambda d: d.sum(lambda d: d['items']))\
+        .flat_map(lambda d: d)\
+        .subscribe(lambda s: print(s))
+
+
+
+Observable.from_(list_) \
+    .group_by(lambda s: len(s)) \
+    .flat_map(lambda grp: grp.count().map(lambda ct: (grp.key, ct))) \
+    .to_dict(lambda t: t[0], lambda t: t[1]) \
+    .subscribe(lambda s: print(s))
