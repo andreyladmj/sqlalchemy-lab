@@ -2,6 +2,19 @@ https://www.safaribooksonline.com/library/view/mastering-python-for/978178899251
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/ - ~!!!!!!!!!!!!!!!!!!!! - SECOND EDITION
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781784397005/ - !!!!!!!!!!!!!!!!!!!1
 
+DATA SCIENCE FOUNDATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+https://www.safaribooksonline.com/videos/data-science-fundamentals/9780134660141
+
+
+
+https://www.safaribooksonline.com/videos/mastering-python/9781771373104 - Mastering Python - Networking and Security
+https://www.safaribooksonline.com/videos/learning-path-from/9781788474733 - Learning Path: From Python Programming to Data Science
+https://www.safaribooksonline.com/library/view/python-data-science/9781789537864/ - Python Data Science Essentials - Third Edition (very good but BIG and need to learn )))
+https://www.safaribooksonline.com/library/view/hands-on-data-science/9781787280748/ - Hands-On Data Science and Python Machine Learning
+https://www.safaribooksonline.com/library/view/web-and-network/9780133887655/ - Web and Network Data Science: Modeling Techniques in Predictive Analytics (interesting but hard)
+https://www.safaribooksonline.com/learning-paths/learning-path-python/9781789954364/ - LEARNING PATH: Python for Data Science – Hands On!
+
+
 React
 2 https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
 https://www.safaribooksonline.com/library/view/hands-on-reactive-programming/9781789138726/
