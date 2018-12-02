@@ -1,11 +1,39 @@
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/70ea7072-dc8f-4755-84b9-e685e91bdb19.xhtml
+https://www.safaribooksonline.com/library/view/python-microservices-development/9781785881114/6be40140-2953-4a3b-a99a-f36127f39dad.xhtml
+https://play.google.com/books/reader?id=A7daDwAAQBAJ&hl=en&pg=GBS.PA33
+https://www.safaribooksonline.com/videos/python-design-patterns/9781786460677?autoplay=false
+https://www.safaribooksonline.com/search/?query=Learning%20Path%3A%20Expert%20Python%20Projects
+
+
+PYTHON EXPERT
+https://www.safaribooksonline.com/search/?query=Learning%20Path%3A%20Expert%20Python%20Projects
+(https://www.safaribooksonline.com/videos/learning-path-expert/9781787123564, https://www.safaribooksonline.com/learning-paths/learning-path-python/9781789615586/)
+
+CURRENT
+https://www.safaribooksonline.com/videos/reactive-programming-in/9781786460332?autoplay=false
+https://www.safaribooksonline.com/library/view/hands-on-reactive-programming/9781789138726/
+https://www.safaribooksonline.com/videos/python-programming-language/9780134217314
+https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/
+https://www.safaribooksonline.com/library/view/python-microservices-development/9781785881114/
+https://www.safaribooksonline.com/videos/python-design-patterns/9781786460677?autoplay=false
+https://www.safaribooksonline.com/videos/data-science-fundamentals/9780134660141
+
 https://www.safaribooksonline.com/library/view/mastering-python-for/9781788992510/
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/ - ~!!!!!!!!!!!!!!!!!!!! - SECOND EDITION
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781784397005/ - !!!!!!!!!!!!!!!!!!!1
+
+DDD
+https://www.safaribooksonline.com/videos/domain-driven-design-distilled/9780134593449
+https://www.safaribooksonline.com/library/view/patterns-principles-and/9781118714706/
+https://www.safaribooksonline.com/library/view/domain-driven-design-in/9781787284944/
 
 DATA SCIENCE FOUNDATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 https://www.safaribooksonline.com/videos/data-science-fundamentals/9780134660141
 
 
+PLOT DATA
+https://www.safaribooksonline.com/library/view/matplotlib-30-cookbook/9781789135718/
+https://www.safaribooksonline.com/videos/python-data-visualization/9781788839754
 
 https://www.safaribooksonline.com/videos/mastering-python/9781771373104 - Mastering Python - Networking and Security
 https://www.safaribooksonline.com/videos/learning-path-from/9781788474733 - Learning Path: From Python Programming to Data Science
@@ -64,3 +92,7 @@ https://www.safaribooksonline.com/library/view/python-high-performance/978178728
 https://www.safaribooksonline.com/library/view/mastering-python-for/9781788992510/
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/ - ~!!!!!!!!!!!!!!!!!!!! - SECOND EDITION
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781784397005/ - !!!!!!!!!!!!!!!!!!!1
+
+
+Python application
+https://www.safaribooksonline.com/library/view/learning-python-application/9781785889196/

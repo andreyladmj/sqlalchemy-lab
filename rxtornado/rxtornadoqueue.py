@@ -1,7 +1,8 @@
+from rx import Observable
 from rx.concurrency import IOLoopScheduler
 from rx.subjects import Subject
 from tornado.ioloop import IOLoop
-from tornado.queues import PriorityQueue
+from tornado.queues import PriorityQueue, QueueEmpty
 from tornado.web import RequestHandler, Application
 from tornado.websocket import WebSocketHandler
 
@@ -44,3 +45,41 @@ class Server:
             only_messages.filter(lambda msg: msg[0] == 'order')\
                 .map(lambda msg: msg[1:])\
                 .subscribe(queue_order)
+
+            def process_order(time):
+                try:
+                    order = self.orders.get_nowait()
+                    print('processing order: {} [{}]'.format(order, order.timestamp))
+                    matching = None
+                    for posted in self.posted_orders:
+                        if posts.matches(order):
+                            matching = posted
+                            break
+
+                    if matching is None:
+                        self.posted_orders.append(order)
+                        print('Could not find match, posted order count is {}'.format(len(self.posted_orders)))
+                    else:
+                        self.posted_orders.remove(posted)
+                        self.fulfilled_orders.append(posted)
+                        self.fulfilled_orders.append(order)
+                        print('order filfilled: {}'.format(order))
+                        print('fulfilled by: {}'.format(posted))
+                except QueueEmpty:
+                    pass
+
+            Observable.interval(100, scheduler=scheduler).subscribe(process_order)
+            only_messages.connect()
+
+    instance = None
+
+    def __init__(self):
+        if Server.instance is None:
+            Server.instance = Server.__Server()
+
+    def __getattr__(self, item):
+        return getattr(self.instance, item)
+
+if __name__ == '__main__':
+    Server().messages.filter(lambda msg: msg == 'opened').subscribe(lambda msg: print('Connection has been opened'))
+    Server().start()
