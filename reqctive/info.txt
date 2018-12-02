@@ -1,6 +1,6 @@
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/70ea7072-dc8f-4755-84b9-e685e91bdb19.xhtml
 https://www.safaribooksonline.com/library/view/python-microservices-development/9781785881114/6be40140-2953-4a3b-a99a-f36127f39dad.xhtml
-https://play.google.com/books/reader?id=A7daDwAAQBAJ&hl=en&pg=GBS.PA33
+https://play.google.com/books/reader?id=A7daDwAAQBAJ&hl=en&pg=GBS.PA40
 https://www.safaribooksonline.com/videos/python-design-patterns/9781786460677?autoplay=false
 https://www.safaribooksonline.com/search/?query=Learning%20Path%3A%20Expert%20Python%20Projects
 
