@@ -1,0 +1,3 @@
+TRANSACTION able:
+InnoDB
+NDB
