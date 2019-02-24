@@ -1,3 +1,5 @@
+штуки, прилипшие к моей собаке, выглядели аппетитнее
+
 https://www.safaribooksonline.com/library/view/mastering-python-networking/9781789135992/70ea7072-dc8f-4755-84b9-e685e91bdb19.xhtml
 https://www.safaribooksonline.com/library/view/python-microservices-development/9781785881114/a3f59c45-82e3-455a-9bb9-d785d36121c9.xhtml
 https://play.google.com/books/reader?id=A7daDwAAQBAJ&hl=en&pg=GBS.PA40
@@ -96,3 +98,21 @@ https://www.safaribooksonline.com/library/view/mastering-python-networking/97817
 
 Python application
 https://www.safaribooksonline.com/library/view/learning-python-application/9781785889196/
+
+
+
+
+
+
+
+=====================================
+Strong understanding of network technologies and protocols (TCP/UDP, NAT, DNS, IPv4/IPv6)
+Good knowledge of OOP, OOD principles.
+
+
+Optional (a plus):
+○	Microservices
+○	TDD
+○	GraphQL
+○	DSL
+○	Golang

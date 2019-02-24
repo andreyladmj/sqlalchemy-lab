@@ -1,0 +1,3 @@
+
+Book of python standart libraties
+https://learning.oreilly.com/library/view/the-python-3/9780134291154/ch02.html#ch02

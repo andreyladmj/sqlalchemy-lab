@@ -1,0 +1,12 @@
+Django (including Django REST Framework and Django Management Commands);
+Amazon Web Services (EC2, S3, ELB, EBS, CloudFront, ElastiCache, Route 53, IAM, RDS);
+RESTful API Design;
+MySQL, Redis;
+Celery, RabbitMQ, AWS SQS;
+Jenkins CI, Fabric;
+Git, GitHub;
+Google Analytics, Flurry, Amazon Redshift;
+
+
+
+PyTorch FRAMEWORK
