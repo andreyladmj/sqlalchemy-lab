@@ -87,9 +87,11 @@ sql_query = """
 df0 = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 df = df0.copy()
 
-df = df0[:4000]
+df = df0[:30000]
 print('DF len', len(df))
 
+
+# df = df[df.order_id.isin([1088491, 1058728, 1505552, 1494183])]
 
 ################################ train ##########################################################
 print('Get actions')
@@ -97,16 +99,18 @@ stime = time()
 actions_df = get_actions(df)
 actions_df = actions_df.set_index('order_id')
 actions_df['is_paid_order'] = df.set_index('order_id').is_paid_order
-print('Done', time()-stime)
+print('Done', time()-stime, 'len', len(actions_df))
 
 
 
-times = [timedelta(minutes=i) for i in range(6)]
+times = [timedelta(minutes=i) for i in range(120)]
+# slice_dt = timedelta(minutes=25)
 
 
 def get_order_features(df):
-    # return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in times])
-    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
+    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in times])
+    # return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in times if dt.empty or dt.item() <= dt_order_placed])
+    # return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
 
 
 def get_features(df, dt_order_placed=timedelta(minutes=1)):
@@ -130,7 +134,24 @@ def get_features(df, dt_order_placed=timedelta(minutes=1)):
 
 
 features_df = actions_df.groupby('order_id').apply(get_order_features)
+print('Save', len(features_df))
+features_df.to_pickle('features_df_with_web.pkl')
 
+
+df[df.order_id == 1088491]
+actions_df.loc[1088491]
+features_df.loc[1088491]
+
+
+
+features_df.loc[1058728]
+features_df.loc[1088491]
+features_df.loc[1494183]
+features_df.loc[1505552]
+
+features_df.index.unique()
+
+features_df = features_df[features_df.dt_last_paid_order.isna()]
 
 
 
@@ -149,7 +170,6 @@ original_df_mean = df.is_paid_order.mean()
 features_df_mean = features_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
 assert(original_df_mean == features_df_mean), "original_df_mean AND features_df_mean does not equal"
 
-slice_dt = timedelta(minutes=60)
 
 mask_paid_more_2_days = (actions_df.is_paid_order == True) & (actions_df.dt_order_placed > slice_dt)
 mask_non_paid = (actions_df.is_paid_order == False)
@@ -175,19 +195,23 @@ features_df_mean = feat.groupby('order_id').is_paid_order.apply(lambda x: x.max(
 # assert(original_df_mean == features_df_mean), "original_df_mean AND features_df_mean does not equal"
 
 # stored_df = feat.copy()
-feat = feat.drop(columns=['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_paid_order', 'dt_last_writer_approved'])
+feat = feat.drop(columns=['dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_paid_order', 'dt_last_writer_approved'])
+# feat = feat.drop(columns=['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_paid_order', 'dt_last_writer_approved'])
 
 d_cnt = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count']
 d_dt = ['dt_order_placed']
 
 feat_filled = fill_empty_values(feat.copy(), d_cnt=d_cnt, d_dt=d_dt)
-feat_seconds = convert_datetimes_to_seconds(feat_filled, d_dt=d_dt)
+feat_seconds = convert_datetimes_to_seconds(feat_filled.copy(), d_dt=d_dt)
 feat_seconds = feat_seconds.sample(frac=1)
 X, Y = get_adaptive_dataset(feat_seconds, d_cnt+d_dt)
 
+X.shape
+
+
 scaler = StandardScaler()
 
-mlp = MLPClassifier(hidden_layer_sizes=(10, 5),
+mlp = MLPClassifier(hidden_layer_sizes=(3, 3),
                     max_iter=1000, verbose=10, tol=1e-6,
                     activation='tanh', solver='adam')
 
@@ -195,8 +219,8 @@ piple = Pipeline([
     ('scale', StandardScaler()),
     ('mlp', mlp),
 ])
-X.shape
-piple.fit(X, Y)
+
+piple.fit(X, Y) # can be passed generator
 
 
 
@@ -224,7 +248,7 @@ test_predict_actions_df = test_actions_df[~test_actions_df.action_id.isin(exclud
 test_predict_actions_df = test_predict_actions_df.sample(frac=1)
 
 df0[:30000].is_paid_order.mean()
-test_predict_actions_df[:500].copy().groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+test_predict_actions_df[:30000].copy().groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
 
 def graph(actions_df, times):
     x_g = []
@@ -232,23 +256,32 @@ def graph(actions_df, times):
     for i in times:
         dt = timedelta(minutes=i)
 
-        t_df = actions_df.groupby('order_id').apply(lambda x: get_features(x, dt))
-        t_df = t_df.reset_index().set_index('order_id')
-        # t_df['is_paid_order'] = test_actions_df.is_paid_order
-        t_df = t_df.join(df0.set_index('order_id').is_paid_order)
-        t_df = t_df.drop_duplicates()
+        predicted = predict_by_time(actions_df, dt)
 
-        test_feat_filled = fill_empty_values(t_df)
-
-        test_feat_seconds = convert_datetimes_to_seconds(test_feat_filled, d_dt=d_dt)
-        test_X, test_Y = get_adaptive_dataset(test_feat_seconds, d_cnt+d_dt)
-
-        y_test_pred_proba = piple.predict_proba(test_X)
-        test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
-        print('Test Predicted for', dt, y_test_pred_proba.mean(0), 'Actual', test_features_df_mean)
-        x_g.append(y_test_pred_proba.mean(0)[1])
+        # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+        # print('Test Predicted for', dt, y_test_pred_proba.mean(0), 'Actual', test_features_df_mean)
+        x_g.append(predicted)
 
     return x_g
+
+def predict_by_time(df, dt):
+    t_df = df.groupby('order_id').apply(lambda x: get_features(x, dt))
+    t_df = t_df.reset_index().set_index('order_id')
+    t_df = t_df.join(df0.set_index('order_id').is_paid_order)
+    t_df = t_df.drop_duplicates()
+
+    test_feat_filled = fill_empty_values(t_df)
+
+    test_feat_seconds = convert_datetimes_to_seconds(test_feat_filled, d_dt=d_dt)
+    test_X, test_Y = get_adaptive_dataset(test_feat_seconds, d_cnt+d_dt)
+
+    y_test_pred_proba = piple.predict_proba(test_X)
+    # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+    return y_test_pred_proba.mean(0)[1]
+
+predict_by_time(test_predict_actions_df[:1000].copy(), timedelta(minutes=160))
+
+
 
 y_g = list(range(60))
 x_g = graph(test_predict_actions_df[:500].copy(), y_g)

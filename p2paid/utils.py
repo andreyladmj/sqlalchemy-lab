@@ -1,3 +1,5 @@
+import multiprocessing
+import os
 from concurrent import futures
 from time import time
 
@@ -5,25 +7,14 @@ import sqlalchemy
 from sklearn.pipeline import Pipeline
 import pandas as pd
 from datetime import timedelta
-
+import numpy as np
 # from edusson_ds_main.db.connections import DBConnectionsFacade
-
+#
 # db_engine_edusson_replica = DBConnectionsFacade.get_edusson_replica()
-# from p2paid.u import get_features
-
-'''
-
-
-[DB_EDUSSON_REPLICA]
-engine = mysql+pymysql
-host = edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com
-db = edusson
-user = code_select
-passwd = 9_4vdmIedhP
-'''
-
 db_engine_edusson_replica = sqlalchemy.create_engine('mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
+# id_to_actions_count = {0: 'order_placed', 3: 'writer_approved_count', 5: 'paid_order_count', }
+# id_to_last_actions_dt = {0: 'dt_order_placed', 3: 'dt_last_writer_approved', 5: 'dt_last_paid_order'}
 
 id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count', 3: 'writer_approved_count',
                        4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
@@ -108,12 +99,22 @@ def get_actions(df):
     df_actions = df_actions.reset_index(drop=True)
     df_actions = df_actions.sort_values('action_date')
     df_actions['dt_order_placed'] = df_actions.groupby('order_id').action_date.apply(lambda x: x - x.min())
+
+    df_actions = df_actions[df_actions.action_id.isin(list(id_to_actions_count.keys()))].copy()
+
     return df_actions
 
 
 def get_features_from_actions(df):
     return df.groupby('order_id').apply(get_order_features)
 
+# def get_features_from_actions(df):
+#     return apply_by_multiprocessing(df.groupby('order_id'), get_order_features, workers=4)
+
+
+
+def get_order_features(df):
+    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
 
 # def get_order_features(df):
 #     with futures.ProcessPoolExecutor() as pool:
@@ -122,13 +123,30 @@ def get_features_from_actions(df):
 #     return pd.concat(res)
 
 
-def get_order_features(df):
-    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
+# name_features = apply_by_multiprocessing(df.tokenized_name,
+#                                          make_categorical_features,
+#                                          workers=4)
 
-import os
+
+def _apply_df(args):
+    df, func, kwargs = args
+    return df.apply(func, **kwargs)
+
+
+def apply_by_multiprocessing(df, func, **kwargs):
+    workers = kwargs.pop('workers')
+    pool = multiprocessing.Pool(processes=workers)
+    result = pool.map(_apply_df, [(d, func, kwargs)
+                                  for d in np.array_split(df, workers)])
+    pool.close()
+    return pd.concat(list(result))
+
+
+
+
+
+
 def get_features(df, dt_order_placed=timedelta(minutes=1)):
-    # print(time(), 'getpid', os.getpid(), 'd', dt_order_placed)
-    stime = time()
     df = df[~df.action_id.isin([0, 5])].copy()
     df_actions_count = df.groupby('action_id').dt_order_placed.apply(lambda x: (x <= dt_order_placed).sum())
     df_actions_count = df_actions_count.rename(id_to_actions_count)
@@ -145,16 +163,19 @@ def get_features(df, dt_order_placed=timedelta(minutes=1)):
     df_features.index.name = ''
     df_features = df_features.to_frame(dt_order_placed).T
     df_features.index.name = 'dt_order_placed'
-    # print('Time', time()-stime)
     return df_features
 
 
 def get_structured_df_from_actions(actions_df, slice_dt=timedelta(days=2), original_df=None):
     features_df = get_features_from_actions(actions_df)
+
+    # features_df = apply_by_multiprocessing(actions_df, get_features_from_actions, workers=4)
+
     features_df.reset_index(inplace=True)
     features_df = features_df.set_index('order_id')
     # features_df['is_paid_order'] = original_df.is_paid_order
     features_df = features_df.join(actions_df.is_paid_order)
+    features_df = features_df.drop_duplicates()
 
     mask_paid_more_2_days = (actions_df.is_paid_order == 1) & (actions_df.dt_order_placed > slice_dt)
     mask_non_paid = (actions_df.is_paid_order == 0)
@@ -168,58 +189,89 @@ def get_structured_df_from_actions(actions_df, slice_dt=timedelta(days=2), origi
 
     features_df = features_df.append(last_features)
 
+    # fill last_features rows with is_paid_order
+    features_df.is_paid_order = features_df.is_paid_order.fillna(0)
     features_df = features_df.set_index('order_id')
+    features_df.is_paid_order = features_df.groupby('order_id').is_paid_order.apply(lambda x: x.max())
+
+    # features_df = features_df.set_index('order_id')
     features_df = features_df.sort_values(['dt_order_placed'])
     return features_df
 
 
-def convert_datetimes_to_seconds(df):
+def convert_datetimes_to_seconds(df, d_dt=None):
     keys = list(id_to_last_actions_dt.values())
-    keys.remove('dt_last_paid_order')
+    keys = [key for key in keys if key in df.columns]
     df[keys] = df[keys].apply(lambda x: x.dt.total_seconds())
     return df
 
 
-def fill_empty_values(df, max_fill_dt_value=timedelta(days=30)):
-    count_keys = list(id_to_actions_count.values())
-    count_keys.remove('paid_order_count')
-    count_keys.remove('order_placed')
-    dt_keys = list(id_to_last_actions_dt.values())
-    dt_keys.remove('dt_last_paid_order')
 
-    for key in count_keys:
-        if key not in df.columns:
-            df[key] = 0
+def fill_empty_values(df, max_fill_dt_value=timedelta(days=30), d_cnt=None, d_dt=None):
+    keys = list(id_to_actions_count.values())
+    keys = [key for key in keys if key in df.columns]
+    df[keys] = df[keys].fillna(0)
 
-    for key in dt_keys:
-        if key not in df.columns:
-            df[key] = max_fill_dt_value
+    keys = list(id_to_last_actions_dt.values())
+    keys = [key for key in keys if key in df.columns]
+    df[keys] = df[keys].fillna(max_fill_dt_value)
 
-    df[count_keys] = df[count_keys].fillna(0)
-    df[dt_keys] = df[dt_keys].fillna(max_fill_dt_value)
     return df
 
 
-def get_dataset(df, original_df=None):
-    count_keys = list(id_to_actions_count.values())
-    count_keys.remove('paid_order_count')
-    count_keys.remove('order_placed')
-    dt_keys = list(id_to_last_actions_dt.values())
-    dt_keys.remove('dt_last_paid_order')
-    features_list = count_keys + dt_keys
+def get_structured_df(df):
+    print('Get actions', 'len df', len(df), 'pid:', os.getpid())
+    stime = time()
+    actions_df = get_actions(df)
+    actions_df = actions_df.set_index('order_id')
+    actions_df['is_paid_order'] = df.set_index('order_id').is_paid_order
+    print('Done', time()-stime, 'pid:', os.getpid())
+
+    print('Get structured_df_from_actions', len(actions_df), 'pid:', os.getpid())
+    stime = time()
+    structured_df = get_structured_df_from_actions(actions_df)
+    structured_df.is_paid_order = structured_df.is_paid_order.fillna(0)
+    print('Done', time()-stime, 'pid:', os.getpid())
+
+    return structured_df
+
+
+def get_dataset(df, keys=None):
+    if not keys:
+        count_keys = list(id_to_actions_count.values())
+        count_keys.remove('paid_order_count')
+        count_keys.remove('order_placed')
+        dt_keys = list(id_to_last_actions_dt.values())
+        dt_keys.remove('dt_last_paid_order')
+        # dt_keys.remove('dt_last_writer_approved')
+        keys = count_keys + dt_keys
     label = 'is_paid_order'
 
-    if original_df is not None:
-        original_df = original_df.set_index('order_id')
+    not_exists_keys = [key for key in keys if key not in df.columns]
+    keys = [key for key in keys if key in df.columns]
 
-        if df.index.name != 'order_id':
-            df = df.set_index('order_id')
+    # df[not_exists_keys] = 0
 
-        df['is_paid_order'] = original_df['is_paid_order']
-
-    X = df[features_list].values
+    X = df[keys].values
     Y = df[label].values
     return X, Y
+
+
+def get_adaptive_dataset(df, keys=None):
+    label = 'is_paid_order'
+
+    not_exists_keys = [key for key in keys if key not in df.columns]
+
+
+    for key in not_exists_keys:
+        df[key] = 0
+
+    keys = [key for key in keys if key in df.columns]
+
+    X = df[keys].values
+    Y = df[label].values
+    return X, Y
+
 
 
 def get_features_by_time(actions_df, dt=timedelta(minutes=1)):
@@ -243,16 +295,3 @@ class OnlinePipeline(Pipeline):
             if i < len(self.steps) - 1:
                 X = est.transform(X)
         return self
-
-# import time
-# def tt(t1, t2):
-#     print(t1, t2, os.getpid())
-#     time.sleep(1)
-#     return t1 + t2
-#
-# if __name__ == '__main__':
-#     l = [i for i in range(200)]
-#     with futures.ProcessPoolExecutor() as pool:
-#         res = pool.map(tt, l, [10] * len(l), chunksize=10)
-#
-#     print(list(res))
