@@ -32,6 +32,7 @@ import os
 from time import time
 
 import sqlalchemy
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
 os.environ['DB_ENV'] = 'prod'
@@ -40,13 +41,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
-sys.path.extend(['D:\Python\sqlalchemy-lab\p2paid'])
-from utils import get_actions, fill_empty_values, convert_datetimes_to_seconds, get_dataset, get_adaptive_dataset
+sys.path.extend(['/home/andrei/Python/sqlalchemy-lab/p2paid'])
+from utils import get_actions, fill_empty_values, convert_datetimes_to_seconds, get_dataset, get_adaptive_dataset, get_adaptive_X
+import concurent_utils
 
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
-pr = cProfile.Profile()
 
 
 #from edusson_ds_main.db.connections import DBConnectionsFacade
@@ -87,7 +88,7 @@ sql_query = """
 df0 = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 df = df0.copy()
 
-df = df0[:30000]
+df = df0[:50000]
 print('DF len', len(df))
 
 
@@ -98,121 +99,87 @@ print('Get actions')
 stime = time()
 actions_df = get_actions(df)
 actions_df = actions_df.set_index('order_id')
-actions_df['is_paid_order'] = df.set_index('order_id').is_paid_order
+# actions_df['is_paid_order'] = df.set_index('order_id').is_paid_order
+# actions_df = actions_df.join(df.set_index('order_id').is_paid_order).drop_duplicates('order_id')
+actions_df = actions_df.join(df.drop_duplicates('order_id').set_index('order_id').is_paid_order)
+
+
 print('Done', time()-stime, 'len', len(actions_df))
 
+times_count = 21
 
+times_df = actions_df[actions_df.dt_order_placed != timedelta(seconds=0)].dt_order_placed.quantile(q=np.linspace(0, 1, times_count))
+times_df = times_df.reset_index()[:times_count-1].dt_order_placed
+times_df.iloc[0] = timedelta()
+# times_df.to_pickle('times_df.pkl')
 
-times = [timedelta(minutes=i) for i in range(120)]
-# slice_dt = timedelta(minutes=25)
+concurent_utils.times_df = times_df
 
+# try:
+print('start get_order_features for 4 processes', len(actions_df))
+partial_ids = np.array_split(actions_df.index.unique(), 4)
+partial_dfs = [actions_df[actions_df.index.isin(slice_ids)] for slice_ids in partial_ids]
 
-def get_order_features(df):
-    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in times])
-    # return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in times if dt.empty or dt.item() <= dt_order_placed])
-    # return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
+with futures.ProcessPoolExecutor() as pool:
+    partial_features = pool.map(concurent_utils.process_partial_df, partial_dfs)
 
+features_df = pd.concat(list(partial_features))
+print('Done', time()-stime)
+# start get_order_features for 4 processes 281809
+# Done 4260.6323318481445
 
-def get_features(df, dt_order_placed=timedelta(minutes=1)):
-    df = df[~df.action_id.isin([0])].copy()
-    df_actions_count = df.groupby('action_id').dt_order_placed.apply(lambda x: (x <= dt_order_placed).sum())
-    df_actions_count = df_actions_count.rename(id_to_actions_count)
+# except Exception as e:
+#     print('WARNING!', str(e))
+#
+#     slice_ids = actions_df.index.unique()[:25000]
+#     actions_df = actions_df[actions_df.index.isin(slice_ids)]
+#
+#     print('start get_order_features', len(actions_df))
+#     stime = time()
+#     features_df = actions_df.groupby('order_id').apply(get_order_features)  # 129942 rows for 3569s
+#     print('Done', time()-stime)
 
-    df_last_action_dt = df.groupby('action_id').dt_order_placed.apply(lambda x: x[x <= dt_order_placed].max())
-    mask = df_last_action_dt.notna()
-
-    if mask.sum():
-        df_last_action_dt.loc[mask] = dt_order_placed - df_last_action_dt[mask]
-
-    df_last_action_dt = df_last_action_dt.rename(id_to_last_actions_dt)
-
-    df_features = pd.concat((df_actions_count, df_last_action_dt))
-    df_features.index.name = ''
-    df_features = df_features.to_frame(dt_order_placed).T
-    df_features.index.name = 'dt_order_placed'
-    return df_features
-
-
-features_df = actions_df.groupby('order_id').apply(get_order_features)
 print('Save', len(features_df))
-features_df.to_pickle('features_df_with_web.pkl')
+features_df.to_pickle('features_df_with_web_{}_orders.pkl'.format(len(df)))
 
-
-df[df.order_id == 1088491]
-actions_df.loc[1088491]
-features_df.loc[1088491]
-
-
-
-features_df.loc[1058728]
-features_df.loc[1088491]
-features_df.loc[1494183]
-features_df.loc[1505552]
-
-features_df.index.unique()
-
-features_df = features_df[features_df.dt_last_paid_order.isna()]
-
-
-
-
-
-
+# features_df = pd.read_pickle('/home/andrei/Python/sqlalchemy-lab/features_df_with_web_488694.pkl')
 
 features_df = features_df.reset_index().set_index('order_id')
+features_df = features_df.join(df.drop_duplicates('order_id').set_index('order_id').is_paid_order)
+
+dt_list = ['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_writer_approved', 'dt_last_paid_order']
+
+features_df[dt_list] = features_df[dt_list].fillna(timedelta(days=30))
 
 
-features_df['is_paid_order'] = df.set_index('order_id').is_paid_order
-features_df = features_df.drop(columns=['dt_last_paid_order', 'paid_order_count'])
+features_df[['{}_secs'.format(key) for key in dt_list]] = features_df[dt_list].apply(lambda x: x.dt.total_seconds())
+features_df[['dt_order_placed_secs']] = features_df[['dt_order_placed']].apply(lambda x: x.dt.total_seconds())
+
+
+# print('describe dt_order_placed')
+# print(features_df.dt_order_placed.describe())
+# features_df = features_df.drop(columns=['dt_last_paid_order', 'paid_order_count'])
 
 
 original_df_mean = df.is_paid_order.mean()
 features_df_mean = features_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
 assert(original_df_mean == features_df_mean), "original_df_mean AND features_df_mean does not equal"
 
+FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count', 'dt_order_placed_secs']
+test_size = 0.2
 
-mask_paid_more_2_days = (actions_df.is_paid_order == True) & (actions_df.dt_order_placed > slice_dt)
-mask_non_paid = (actions_df.is_paid_order == False)
+################### real_p2p_proba ##############################
+observed_p2p_df = features_df.groupby('dt_order_placed').is_paid_order.mean().to_frame('observed_p2p')
+features_df = features_df.join(observed_p2p_df.observed_p2p, on='dt_order_placed')
 
-# remove all action that more than slice dt limit
-features_df = features_df[features_df.dt_order_placed <= slice_dt]
+features_df = features_df.fillna(0)
 
-features_df = features_df.reset_index().set_index('order_id')
-last_features = actions_df[mask_paid_more_2_days | mask_non_paid].groupby('order_id').apply(lambda x: get_features(x, slice_dt))
-last_features = last_features.reset_index().set_index('order_id')
-
-
-feat = features_df.append(last_features)
-feat.is_paid_order = feat.is_paid_order.fillna(False)
-feat.is_paid_order = feat.groupby('order_id').is_paid_order.apply(lambda x: x.max())
-
-
-# feat = feat.drop(columns=['dt_last_paid_order', 'paid_order_count'])
-feat.head()
-
-original_df_mean = df.is_paid_order.mean()
-features_df_mean = feat.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
-# assert(original_df_mean == features_df_mean), "original_df_mean AND features_df_mean does not equal"
-
-# stored_df = feat.copy()
-feat = feat.drop(columns=['dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_paid_order', 'dt_last_writer_approved'])
-# feat = feat.drop(columns=['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_paid_order', 'dt_last_writer_approved'])
-
-d_cnt = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count']
-d_dt = ['dt_order_placed']
-
-feat_filled = fill_empty_values(feat.copy(), d_cnt=d_cnt, d_dt=d_dt)
-feat_seconds = convert_datetimes_to_seconds(feat_filled.copy(), d_dt=d_dt)
-feat_seconds = feat_seconds.sample(frac=1)
-X, Y = get_adaptive_dataset(feat_seconds, d_cnt+d_dt)
-
-X.shape
-
+df_train, df_test = train_test_split(features_df, test_size=test_size)
 
 scaler = StandardScaler()
 
-mlp = MLPClassifier(hidden_layer_sizes=(3, 3),
-                    max_iter=1000, verbose=10, tol=1e-6,
+mlp = MLPClassifier(hidden_layer_sizes=(32, 16, 16, 8, 4),
+                    max_iter=1000, verbose=10, tol=1e-5,
                     activation='tanh', solver='adam')
 
 piple = Pipeline([
@@ -220,49 +187,49 @@ piple = Pipeline([
     ('mlp', mlp),
 ])
 
-piple.fit(X, Y) # can be passed generator
+piple.fit(df_train[FEATURES], df_train.is_paid_order) # can be passed generator
 
 
 
-y_pred_proba = piple.predict_proba(X)
+y_pred_proba = piple.predict_proba(df_train[FEATURES])
 print('Train Predicted', y_pred_proba.mean(0), 'Actual', features_df_mean)
 
+features_df['p2p_proba'] =5
+
+# df_train.groupby('dt_order_placed').apply(lambda x: piple.predict_proba)
+df_train['p2p_proba'] = piple.predict_proba(df_train[FEATURES])[:, 1]
 
 
 
-test_actions_df = get_actions(df0[:30000])
-test_actions_df = test_actions_df.set_index('order_id')
-# test_actions_df['is_paid_order'] = df0.set_index('order_id').is_paid_order
-test_actions_df = test_actions_df.join(df0.set_index('order_id').is_paid_order)
-test_actions_df = test_actions_df.drop_duplicates()
+#############################################################
+compare_p2p = df_train.groupby('dt_order_placed')[['is_paid_order', 'p2p_proba']].mean()
 
-id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count', 3: 'writer_approved_count',
-                       4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
-id_to_last_actions_dt = {0: 'dt_order_placed', 1: 'dt_last_message', 2: 'dt_last_edit', 3: 'dt_last_writer_approved',
-                         4: 'dt_last_bid_cancel', 5: 'dt_last_paid_order', 6: 'dt_last_chat'}
-exclude_ids = []
+compare_p2p.index = compare_p2p.index.total_seconds() / 60
+compare_p2p.plot()
+plt.show()
+
+df_train['is_paid'] = df_train['is_paid_order']
+df_train['is_first_client_order'] = 1
+
+df_train.index.nunique()
+
+times_df
+# for t in df_train.dt_order_placed.unique():
+for t in times_df:
+    check_df = df_train[df_train.dt_order_placed == t]
+    print(t)
+    evaluate(check_df)
 
 
-test_predict_actions_df = test_actions_df[~test_actions_df.action_id.isin(exclude_ids)]
+'''
+10 - 100
+5  - 
+'''
 
-test_predict_actions_df = test_predict_actions_df.sample(frac=1)
 
-df0[:30000].is_paid_order.mean()
-test_predict_actions_df[:30000].copy().groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
 
-def graph(actions_df, times):
-    x_g = []
 
-    for i in times:
-        dt = timedelta(minutes=i)
 
-        predicted = predict_by_time(actions_df, dt)
-
-        # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
-        # print('Test Predicted for', dt, y_test_pred_proba.mean(0), 'Actual', test_features_df_mean)
-        x_g.append(predicted)
-
-    return x_g
 
 def predict_by_time(df, dt):
     t_df = df.groupby('order_id').apply(lambda x: get_features(x, dt))
@@ -279,12 +246,123 @@ def predict_by_time(df, dt):
     # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
     return y_test_pred_proba.mean(0)[1]
 
-predict_by_time(test_predict_actions_df[:1000].copy(), timedelta(minutes=160))
 
 
 
-y_g = list(range(60))
-x_g = graph(test_predict_actions_df[:500].copy(), y_g)
+test_actions_df = get_actions(df0)
+test_actions_df = test_actions_df.set_index('order_id')
+test_actions_df = test_actions_df.join(df0.set_index('order_id').is_paid_order)
+test_actions_df = test_actions_df.drop_duplicates()
 
-plt.plot(y_g, x_g)
+id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count', 3: 'writer_approved_count',
+                       4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
+id_to_last_actions_dt = {0: 'dt_order_placed', 1: 'dt_last_message', 2: 'dt_last_edit', 3: 'dt_last_writer_approved',
+                         4: 'dt_last_bid_cancel', 5: 'dt_last_paid_order', 6: 'dt_last_chat'}
+
+######################### MAKE HIST #####################################
+
+def pp(df, dt):
+    t_df = get_features(df, dt)
+    t_df = t_df.reset_index()
+
+    if 'paid_order_count' in t_df.columns and t_df.paid_order_count.max() == 1:
+        return 1
+
+    test_feat_filled = fill_empty_values(t_df)
+    test_feat_seconds = convert_datetimes_to_seconds(test_feat_filled, d_dt=d_dt)
+    test_X = get_adaptive_X(test_feat_seconds, d_cnt+d_dt)
+
+    y_test_pred_proba = piple.predict_proba(test_X)
+    # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+    return y_test_pred_proba.mean(0)[1]
+
+
+test_actions_df = test_actions_df.sample(frac=1)
+u_ids = test_actions_df.index.unique()
+
+hist_df = test_actions_df[test_actions_df.index.isin(u_ids[:10000])]
+
+p_mins = [0, 1, 2, 5, 7, 10, 15, 20, 30, 45, 60, 90]
+probs_dfs = []
+
+for mins in p_mins:
+    print('mins', mins)
+
+    x_vals = hist_df.groupby('order_id').apply(lambda x: pp(x, timedelta(minutes=mins)))
+    # hist_df[15:16].groupby('order_id').apply(lambda x: pp(x, timedelta(minutes=1160)))
+    # hist_df.loc[1519039].groupby('order_id').apply(lambda x: pp(x, timedelta(minutes=0)))
+    # hist_df.groupby('order_id').apply(lambda x: pp(x, timedelta(minutes=0)))
+    # df0[df0.order_id == 1519039]
+
+    fr = x_vals.to_frame('probability')
+
+    fr['is_paid_orders'] = hist_df.groupby('order_id').is_paid_order.max()
+
+    # tmp_df = fr.reset_index().groupby('order_id').apply(lambda x: x[['probability', 'is_paid_orders']].max(axis=1)).to_frame('probability_')
+    # tmp_df = tmp_df.reset_index().drop(columns=['level_1']).set_index('order_id')
+    # fr['probability_'] = tmp_df.probability_
+
+    probs_dfs.append(fr)
+
+    fr.probability.hist(bins=50)
+    plt.title('{} mins'.format(mins))
+    plt.show()
+
+
+probs_dfs[0].probability.mean()
+probs_dfs[0].is_paid_orders.mean()
+
+for h, m in zip(probs_dfs, p_mins):
+
+    mdf = h[h.probability != 1]
+
+    print(m, mdf.probability.mean(), mdf.is_paid_orders.mean(), mdf.probability.std())
+    # h.probability.hist(bins=20)
+    # plt.title('{} mins'.format(m))
+    # plt.show()
+
+
+######################### MAKE HIST #####################################
+
+############################################################################3
+#test_actions_df[~test_actions_df.action_id.isin([0,1,5])].action_id.unique()
+
+
+# actions_1 = [0,1,2,3,4,5,6]
+actions_1 = [0,1,5]
+remove_ids = test_actions_df[~test_actions_df.action_id.isin(actions_1)].index.unique()
+peoples_whos_do_action_1 = test_actions_df[~test_actions_df.index.isin(remove_ids)]
+
+peoples_whos_do_action_1.action_id.unique()
+
+
+
+actions_2 = [0,5]
+remove_ids = test_actions_df[~test_actions_df.action_id.isin(actions_2)].index.unique()
+peoples_whos_do_action_2 = test_actions_df[~test_actions_df.index.isin(remove_ids)]
+
+peoples_whos_do_action_2.action_id.unique()
+
+
+def graph(actions_df, times):
+    x_g = []
+
+    for i in times:
+        dt = timedelta(minutes=i)
+
+        predicted = predict_by_time(actions_df, dt)
+        print(dt, predicted)
+        x_g.append(predicted)
+
+    return x_g
+
+
+y_g = list(range(0, 60, 2))
+x1_g = graph(peoples_whos_do_action_1[:500].copy(), y_g)
+x2_g = graph(peoples_whos_do_action_2[:500].copy(), y_g)
+
+plt.plot(y_g, list(zip(x1_g, x2_g)))
+plt.title('At least on action (messages_count)')
+plt.xlabel('Time mins')
+plt.ylabel('Probability')
 plt.show()

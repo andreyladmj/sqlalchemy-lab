@@ -75,6 +75,12 @@ ETL_LTD_TS_4weeks
     preprocess dataframe
     resample dataframe
     plot
+    
+    
+    
+    
+    MODEL WORKS WITH DF
+    REPOSITORY PREPARE DF TO DATABASE
 """
 
 class ETL_MODEL:

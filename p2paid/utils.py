@@ -273,6 +273,19 @@ def get_adaptive_dataset(df, keys=None):
     return X, Y
 
 
+def get_adaptive_X(df, keys=None):
+    not_exists_keys = [key for key in keys if key not in df.columns]
+
+
+    for key in not_exists_keys:
+        df[key] = 0
+
+    keys = [key for key in keys if key in df.columns]
+
+    X = df[keys].values
+    return X
+
+
 
 def get_features_by_time(actions_df, dt=timedelta(minutes=1)):
     df = actions_df.groupby('order_id').apply(lambda x: get_features(x, dt))
@@ -295,3 +308,192 @@ class OnlinePipeline(Pipeline):
             if i < len(self.steps) - 1:
                 X = est.transform(X)
         return self
+
+
+
+
+
+
+
+
+def get_p2p_proba_from_api_log(order_ids: list) -> pd.Series:
+
+    likes_ls = [f'(url LIKE "%%{order_id}%%")' for order_id in order_ids]
+
+    cond_likes = "OR".join(np.array(likes_ls))
+
+    sql_query = f"""
+    SELECT response
+    FROM api_service_log 
+    WHERE service_id = 2
+    AND api_user_id = 1
+    AND status = 200
+    AND ({cond_likes})
+    GROUP BY url;
+    """
+
+    df = pd.read_sql(
+        sql=sql_query,
+        con=DBConnectionsFacade.get_edusson_ds_replica()
+    )
+
+    def response_dict(s):
+        s = s.replace("[b\'","").replace("\\n\']","")
+        return json.loads(s)
+
+    df["response_dict"] = df.response.apply(response_dict)
+    df["order_id"] = df.response_dict.apply(lambda x: x["result"]["order_id"])
+    df["place2paid_proba"] = df.response_dict.apply(lambda x: x["result"]["place2paid_proba"])
+
+    return df.set_index("order_id").place2paid_proba
+
+
+CHUNK_SIZE = 1000
+
+
+def evaluate(df_test, CHUNK_SIZE=1000):
+
+    plot_p2p_proba_distrib(df_test)
+
+    df_eval = evaluate_by_chunks(df_test, CHUNK_SIZE)
+
+    plot_qq_plot(df_eval)
+
+    plot_z_score_distrib(df_eval)
+    plot_z_score_abs_distrib(df_eval)
+
+    print(f"chunks R^2 score (corr): {get_r2_coeff(df_eval):.5f}")
+    print(f"mean chunks z-score: {df_eval.z_score.mean():.5f}")
+    print(f"mean chunks abs(z-score): {df_eval.z_score_abs.mean():.5f}")
+
+
+get_r2_coeff = lambda df_eval: np.corrcoef(df_eval.p2p_obs, df_eval.p2p_proba)[0, 1]
+
+import matplotlib.pyplot as plt
+def plot_p2p_proba_distrib(df):
+    mask = df.is_first_client_order.astype(bool)
+    bins = np.arange(0, df.p2p_proba.max(), 0.01)
+    df[mask].p2p_proba.hist(bins=bins)
+    df[~mask].p2p_proba.hist(bins=bins)
+
+    plt.title('estimated place2paid probability distribution: FCO')
+    plt.ylabel('orders count')
+    plt.xlabel('probability of place2paid')
+
+
+def evaluate_by_chunks(df, CHUNK_SIZE):
+    """split dataset by chunks and calculate some statistics for them"""
+
+
+    chunks_count = len(df) // CHUNK_SIZE
+    df_sample = df.sample(chunks_count*CHUNK_SIZE)
+    df_sample = df_sample.sort_values('p2p_proba')
+    chunks = np.split(df_sample, chunks_count)
+    df_eval = pd.DataFrame([evaluate_chunk_df(df_ch) for df_ch in chunks])
+
+    return df_eval
+def evaluate_chunk_df(df):
+    """calculate evaluation metrix"""
+
+    d = dict(
+        p2p_proba=df.p2p_proba.mean(),
+        p2p_obs=df.is_paid.mean(),
+        p2p_obs_std_err=get_std_err(df.is_paid)
+    )
+
+    d['diff_err'] = d['p2p_proba'] - d['p2p_obs']
+
+    if d['p2p_obs']:
+        d['diff_err_relative'] = d['diff_err'] / d['p2p_obs']
+        d['z_score'] = d['diff_err'] / d['p2p_obs_std_err']
+        d['z_score_abs'] = abs(d['z_score'])
+
+    else:
+        d['diff_err_relative'] = np.NaN
+        d['z_score'] = np.NaN
+        d['z_score_abs'] = np.NaN
+
+    d = {key: round(val, 5) for key, val in d.items()}
+
+    return d
+def plot_qq_plot(df_eval):
+    """plot p2p observed rate vs predicted proba Q-Q plot"""
+
+    start = df_eval[['p2p_obs', 'p2p_proba']].values.min()
+    end = df_eval[['p2p_obs', 'p2p_proba']].values.max()
+    p = np.linspace(start, end, 100)
+    std_err = np.sqrt(p * (1 - p) / CHUNK_SIZE)
+    conf_interv = 2 * std_err
+
+    plt.figure()
+    plt.plot(df_eval.p2p_obs, df_eval.p2p_proba, 'ro')
+    plt.plot(p, p, 'b--')
+    plt.fill_between(p, p + conf_interv, p - conf_interv, facecolor='yellow')
+    plt.title('place2paid: observed rate vs predicted proba')
+    plt.xlabel('observed p2p rate')
+    plt.ylabel('predicted p2p proba')
+    plt.show()
+def plot_z_score_distrib(df_eval):
+    """plot p2p observed rate vs predicted proba z-score distrib"""
+
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    conf_interv = 2
+
+    fig, ax1 = plt.subplots()
+
+    ax1.plot(df_eval.p2p_obs, df_eval.z_score, 'ro')
+    ax1.fill_between(df_eval.p2p_obs, [-conf_interv] * len(df_eval), [conf_interv] * len(df_eval), facecolor='yellow')
+    ax1.set_xlabel('observed p2p rate')
+    ax1.set_ylabel('z-score')
+
+    # create new axes on the right of the current axes
+    divider = make_axes_locatable(ax1)
+    ax2 = divider.append_axes("right", 1.2, pad=0.2, sharey=ax1)
+    df_eval.z_score.hist(ax=ax2, orientation='horizontal')
+    ax2.yaxis.set_tick_params(labelleft=False)
+
+    # add reference lines
+    for ax in [ax1, ax2]:
+        ax.axhline(df_eval.z_score.mean(), color='r', linestyle='-', linewidth=1)
+        ax.axhline(0, color='g', linestyle='-', linewidth=1)  # mean
+        ax.axhline(conf_interv, color='g', linestyle='--', linewidth=1)  # conf_interv
+        ax.axhline(-conf_interv, color='g', linestyle='--', linewidth=1)  # conf_interv
+
+    fig.suptitle('place2paid: observed rate vs predicted proba z-score distrib')
+
+    plt.show()
+
+
+get_std_err = lambda x: np.sqrt(np.mean(x) * (1 - np.mean(x)) / len(x))
+
+def plot_z_score_abs_distrib(df_eval):
+    """plot p2p observed rate vs predicted proba abs(z-score) distrib"""
+
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    conf_interv = 2
+
+    fig, ax1 = plt.subplots()
+
+    ax1.plot(df_eval.p2p_obs, df_eval.z_score_abs, 'ro')
+    ax1.fill_between(df_eval.p2p_obs, [0] * len(df_eval), [conf_interv] * len(df_eval), facecolor='yellow')
+    ax1.set_xlabel('observed p2p rate')
+    ax1.set_ylabel('|z-score|')
+
+    # create new axes on the right of the current axes
+    divider = make_axes_locatable(ax1)
+    ax2 = divider.append_axes("right", 1.2, pad=0.2, sharey=ax1)
+    df_eval.z_score_abs.hist(ax=ax2, orientation='horizontal')
+    ax2.yaxis.set_tick_params(labelleft=False)
+
+    # add reference lines
+    for ax in [ax1, ax2]:
+        ax.axhline(df_eval.z_score_abs.mean(), color='r', linestyle='-', linewidth=1)
+        ax.axhline(np.sqrt(2/np.pi), color='g', linestyle='-', linewidth=1)
+        ax.axhline(conf_interv, color='g', linestyle='--', linewidth=1)
+
+    fig.suptitle('place2paid: observed rate vs predicted proba |z-score| distrib')
+
+    plt.show()
+

@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
-sys.path.extend(['D:\Python\sqlalchemy-lab\p2paid'])
+sys.path.extend(['/home/andrei/Python/sqlalchemy-lab/p2paid'])
 from utils import get_actions, fill_empty_values, convert_datetimes_to_seconds, get_dataset, get_adaptive_dataset
 
 from sklearn.neural_network import MLPClassifier
@@ -87,7 +87,7 @@ sql_query = """
 df0 = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 df = df0.copy()
 
-df = df0[:4000]
+df = df0[:10000]
 print('DF len', len(df))
 
 
@@ -187,7 +187,7 @@ X, Y = get_adaptive_dataset(feat_seconds, d_cnt+d_dt)
 
 scaler = StandardScaler()
 
-mlp = MLPClassifier(hidden_layer_sizes=(10, 5),
+mlp = MLPClassifier(hidden_layer_sizes=(20, 15, 10, 5),
                     max_iter=1000, verbose=10, tol=1e-6,
                     activation='tanh', solver='adam')
 
@@ -206,7 +206,8 @@ print('Train Predicted', y_pred_proba.mean(0), 'Actual', features_df_mean)
 
 
 
-test_actions_df = get_actions(df0[:30000])
+
+test_actions_df = get_actions(df0[:150000])
 test_actions_df = test_actions_df.set_index('order_id')
 # test_actions_df['is_paid_order'] = df0.set_index('order_id').is_paid_order
 test_actions_df = test_actions_df.join(df0.set_index('order_id').is_paid_order)
@@ -216,15 +217,22 @@ id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count',
                        4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
 id_to_last_actions_dt = {0: 'dt_order_placed', 1: 'dt_last_message', 2: 'dt_last_edit', 3: 'dt_last_writer_approved',
                          4: 'dt_last_bid_cancel', 5: 'dt_last_paid_order', 6: 'dt_last_chat'}
-exclude_ids = []
 
 
-test_predict_actions_df = test_actions_df[~test_actions_df.action_id.isin(exclude_ids)]
+actions_1 = [0,1,2,3,4,5,6]
+remove_ids = test_actions_df[~test_actions_df.action_id.isin(actions_1)].index.unique()
+peoples_whos_do_action_1 = test_actions_df[~test_actions_df.index.isin(remove_ids)]
 
-test_predict_actions_df = test_predict_actions_df.sample(frac=1)
+peoples_whos_do_action_1.action_id.unique()
 
-df0[:30000].is_paid_order.mean()
-test_predict_actions_df[:500].copy().groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+
+
+actions_2 = [0,5]
+remove_ids = test_actions_df[~test_actions_df.action_id.isin(actions_2)].index.unique()
+peoples_whos_do_action_2 = test_actions_df[~test_actions_df.index.isin(remove_ids)]
+
+peoples_whos_do_action_2.action_id.unique()
+
 
 def graph(actions_df, times):
     x_g = []
@@ -232,26 +240,31 @@ def graph(actions_df, times):
     for i in times:
         dt = timedelta(minutes=i)
 
-        t_df = actions_df.groupby('order_id').apply(lambda x: get_features(x, dt))
-        t_df = t_df.reset_index().set_index('order_id')
-        # t_df['is_paid_order'] = test_actions_df.is_paid_order
-        t_df = t_df.join(df0.set_index('order_id').is_paid_order)
-        t_df = t_df.drop_duplicates()
-
-        test_feat_filled = fill_empty_values(t_df)
-
-        test_feat_seconds = convert_datetimes_to_seconds(test_feat_filled, d_dt=d_dt)
-        test_X, test_Y = get_adaptive_dataset(test_feat_seconds, d_cnt+d_dt)
-
-        y_test_pred_proba = piple.predict_proba(test_X)
-        test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
-        print('Test Predicted for', dt, y_test_pred_proba.mean(0), 'Actual', test_features_df_mean)
-        x_g.append(y_test_pred_proba.mean(0)[1])
+        predicted = predict_by_time(actions_df, dt)
+        print(dt, predicted)
+        x_g.append(predicted)
 
     return x_g
 
-y_g = list(range(60))
-x_g = graph(test_predict_actions_df[:500].copy(), y_g)
+def predict_by_time(df, dt):
+    t_df = df.groupby('order_id').apply(lambda x: get_features(x, dt))
+    t_df = t_df.reset_index().set_index('order_id')
+    t_df = t_df.join(df0.set_index('order_id').is_paid_order)
+    t_df = t_df.drop_duplicates()
 
-plt.plot(y_g, x_g)
+    test_feat_filled = fill_empty_values(t_df)
+
+    test_feat_seconds = convert_datetimes_to_seconds(test_feat_filled, d_dt=d_dt)
+    test_X, test_Y = get_adaptive_dataset(test_feat_seconds, d_cnt+d_dt)
+
+    y_test_pred_proba = piple.predict_proba(test_X)
+    # test_features_df_mean = t_df.groupby('order_id').is_paid_order.apply(lambda x: x.max()).mean()
+    return y_test_pred_proba.mean(0)[1]
+
+
+y_g = list(range(60))
+x1_g = graph(peoples_whos_do_action_1[:800].copy(), y_g)
+x2_g = graph(peoples_whos_do_action_2[:800].copy(), y_g)
+
+plt.plot(y_g, list(zip(x1_g, x2_g)))
 plt.show()
