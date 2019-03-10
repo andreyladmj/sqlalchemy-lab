@@ -1,0 +1,7 @@
+get examples for lunar module
+
+https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
+http://incompleteideas.net/book/bookdraft2017nov5.pdf
+
+https://learning.oreilly.com/library/view/reinforcement-learning-with/9781788835725/ddbf6302-85c2-442f-b1f0-50d605259215.xhtml
+https://learning.oreilly.com/library/view/tensorflow-machine-learning/9781789131680/cover.xhtml
