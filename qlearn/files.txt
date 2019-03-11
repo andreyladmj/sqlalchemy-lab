@@ -5,3 +5,11 @@ http://incompleteideas.net/book/bookdraft2017nov5.pdf
 
 https://learning.oreilly.com/library/view/reinforcement-learning-with/9781788835725/ddbf6302-85c2-442f-b1f0-50d605259215.xhtml
 https://learning.oreilly.com/library/view/tensorflow-machine-learning/9781789131680/cover.xhtml
+
+
+https://github.com/JnyJny/pyxlander
+
+
+https://www.youtube.com/watch?v=PDbXPBwOavc
+https://www.youtube.com/results?search_query=policy+gradient+methods+tensorflow
+https://www.youtube.com/watch?v=t1A3NTttvBA - from google
