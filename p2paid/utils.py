@@ -312,6 +312,31 @@ class OnlinePipeline(Pipeline):
 
 
 
+def get_orders_info(ids):
+    ids = ','.join([str(order_id) for order_id in ids])
+
+    sql_query = """
+        SELECT  
+            t0.order_id,
+            t0.is_paid_order,
+            t0.date_started AS date_paid,
+            bids.date_state_change AS date_writer_approved,
+            order_additional.smart_bidding_place2paid AS place2paid_proba
+            
+        FROM es_orders t0
+        LEFT JOIN es_orders_additional order_additional ON order_additional.order_id = t0.order_id
+        LEFT JOIN es_bids bids ON bids.order_id = t0.order_id AND bids.state_id = 5 AND bid_type_id = 1
+        
+        WHERE t0.order_date > '2018-01-01' 
+        AND t0.is_easy_bidding = 0
+        AND t0.is_first_client_order = 1
+        AND order_additional.device_type_id_create = 1
+        # AND t0.order_id NOT IN (SELECT order_id FROM es_order_reassign_history)
+        AND t0.test_order = 0
+        AND t0.site_id != 31 
+        AND t0.order_id IN ({})""".format(ids)
+
+    return pd.read_sql(sql=sql_query, con=db_engine_edusson_replica).drop_duplicates('order_id').set_index('order_id')
 
 
 
@@ -381,7 +406,7 @@ def plot_p2p_proba_distrib(df):
     plt.xlabel('probability of place2paid')
 
 
-def evaluate_by_chunks(df, CHUNK_SIZE):
+def evaluate_by_chunks(df, CHUNK_SIZE=1000):
     """split dataset by chunks and calculate some statistics for them"""
 
 
@@ -416,7 +441,9 @@ def evaluate_chunk_df(df):
     d = {key: round(val, 5) for key, val in d.items()}
 
     return d
-def plot_qq_plot(df_eval):
+
+
+def plot_qq_plot(df_eval, CHUNK_SIZE=1000):
     """plot p2p observed rate vs predicted proba Q-Q plot"""
 
     start = df_eval[['p2p_obs', 'p2p_proba']].values.min()
@@ -425,14 +452,14 @@ def plot_qq_plot(df_eval):
     std_err = np.sqrt(p * (1 - p) / CHUNK_SIZE)
     conf_interv = 2 * std_err
 
-    plt.figure()
+    # plt.figure()
     plt.plot(df_eval.p2p_obs, df_eval.p2p_proba, 'ro')
     plt.plot(p, p, 'b--')
     plt.fill_between(p, p + conf_interv, p - conf_interv, facecolor='yellow')
     plt.title('place2paid: observed rate vs predicted proba')
     plt.xlabel('observed p2p rate')
     plt.ylabel('predicted p2p proba')
-    plt.show()
+
 def plot_z_score_distrib(df_eval):
     """plot p2p observed rate vs predicted proba z-score distrib"""
 

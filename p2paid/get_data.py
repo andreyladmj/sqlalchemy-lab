@@ -87,6 +87,21 @@ sql_query = """
 
 df0 = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 df = df0.copy()
+
+
+print('Start calc times_df')
+times_count = 51
+actions_df = get_actions(df0)
+actions_df = actions_df.set_index('order_id')
+actions_df = actions_df.join(df.drop_duplicates('order_id').set_index('order_id').is_paid_order)
+times_df = actions_df[actions_df.dt_order_placed != timedelta(seconds=0)].dt_order_placed.quantile(q=np.linspace(0, 1, times_count))
+times_df = times_df.reset_index()[:times_count-1].dt_order_placed
+times_df.iloc[0] = timedelta()
+times_df.to_pickle('times_df_for_all_actions.pkl')
+
+concurent_utils.times_df = times_df
+print('Done times_df')
+
 size = 25000
 for i in range(0, len(df0), size):
     df = df0[i:i+size]
@@ -99,13 +114,11 @@ for i in range(0, len(df0), size):
 
     print('Done', time()-stime, 'len', len(actions_df))
 
-    times_count = 51
-
-    times_df = actions_df[actions_df.dt_order_placed != timedelta(seconds=0)].dt_order_placed.quantile(q=np.linspace(0, 1, times_count))
-    times_df = times_df.reset_index()[:times_count-1].dt_order_placed
-    times_df.iloc[0] = timedelta()
-
-    concurent_utils.times_df = times_df
+    # times_count = 51
+    #
+    # times_df = actions_df[actions_df.dt_order_placed != timedelta(seconds=0)].dt_order_placed.quantile(q=np.linspace(0, 1, times_count))
+    # times_df = times_df.reset_index()[:times_count-1].dt_order_placed
+    # times_df.iloc[0] = timedelta()
 
     print('start get_order_features for 4 processes', len(actions_df))
     partial_ids = np.array_split(actions_df.index.unique(), 4)
