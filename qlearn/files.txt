@@ -13,3 +13,11 @@ https://github.com/JnyJny/pyxlander
 https://www.youtube.com/watch?v=PDbXPBwOavc
 https://www.youtube.com/results?search_query=policy+gradient+methods+tensorflow
 https://www.youtube.com/watch?v=t1A3NTttvBA - from google
+
+
+
+
+
+NORM
+https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
+good - https://www.oreilly.com/ideas/reinforcement-learning-with-tensorflow
