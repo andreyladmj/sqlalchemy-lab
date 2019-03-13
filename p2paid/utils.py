@@ -1,9 +1,12 @@
+import json
 import multiprocessing
 import os
+os.environ['DB_ENV'] = 'prod'
 from concurrent import futures
 from time import time
 
 import sqlalchemy
+from edusson_ds_main.db.connections import DBConnectionsFacade
 from sklearn.pipeline import Pipeline
 import pandas as pd
 from datetime import timedelta
@@ -339,13 +342,49 @@ def get_orders_info(ids):
     return pd.read_sql(sql=sql_query, con=db_engine_edusson_replica).drop_duplicates('order_id').set_index('order_id')
 
 
+def make_tmp_p2p_mysql_table():
+    sql = """
+    CREATE TEMPORARY TABLE first_p2p_score 
+    SELECT id, REPLACE(REPLACE(url, '/api/v1/orders/', ''), '?', '') as order_id, response, min(date_created) as date_created 
+    FROM edusson_data_science.api_service_log
+    WHERE service_id = 2
+    AND api_user_id = 1
+    AND status = 200
+    AND is_success = 1
+    GROUP BY url ORDER BY id DESC;
+    """
 
+    with DBConnectionsFacade.get_edusson_ds().connect() as conn:
+        conn.execute(sql)
+
+def drop_tmp_p2p_mysql_table():
+    with DBConnectionsFacade.get_edusson_ds().connect() as conn:
+        conn.execute("""DROP TABLE IF EXISTS first_p2p_score;""")
 
 def get_p2p_proba_from_api_log(order_ids: list) -> pd.Series:
+    sql_query = """
+        SELECT * FROM first_p2p_score WHERE order_id IN ({});
+    """.format(','.join([str(i) for i in order_ids]))
 
+    df = pd.read_sql(
+        sql=sql_query,
+        con=DBConnectionsFacade.get_edusson_ds()
+    )
+
+    def response_dict(s):
+        s = s.replace("[b\'","").replace("\\n\']","").replace("\\n", '')
+        return json.loads(s)
+
+    df["response_dict"] = df.response.apply(response_dict)
+    df["order_id"] = df.response_dict.apply(lambda x: x["result"]["order_id"])
+    df["place2paid_proba"] = df.response_dict.apply(lambda x: x["result"]["place2paid_proba"])
+
+    return df.set_index("order_id").place2paid_proba
+
+def get_p2p_proba_from_api_log2(order_ids: list) -> pd.Series:
     likes_ls = [f'(url LIKE "%%{order_id}%%")' for order_id in order_ids]
 
-    cond_likes = "OR".join(np.array(likes_ls))
+    cond_likes = " OR ".join(np.array(likes_ls))
 
     sql_query = f"""
     SELECT response

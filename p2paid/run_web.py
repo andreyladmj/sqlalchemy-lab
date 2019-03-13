@@ -54,6 +54,7 @@ import matplotlib.pyplot as plt
 
 #db_engine_edusson_replica = DBConnectionsFacade.get_edusson_replica()
 db_engine_edusson_replica = sqlalchemy.create_engine('mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
+# db_engine_edusson_ds_replica = sqlalchemy.create_engine('mysql+pymysql://developer:9_4vdmIedhP@edusson-data-science-db.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
 id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count', 3: 'writer_approved_count', 4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
 id_to_last_actions_dt = {0: 'dt_order_placed', 1: 'dt_last_message', 2: 'dt_last_edit', 3: 'dt_last_writer_approved', 4: 'dt_last_bid_cancel', 5: 'dt_last_paid_order', 6: 'dt_last_chat'}

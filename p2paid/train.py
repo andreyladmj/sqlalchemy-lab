@@ -5,6 +5,8 @@ from time import time
 
 import pandas as pd
 import sys
+
+from sklearn.externals import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
@@ -40,7 +42,11 @@ pd.set_option('display.line_width', 2000)
 test_size = 0.2
 FILL_NA = timedelta(days=30)
 # FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count', 'dt_order_placed_secs']
-FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'chat_count', 'dt_order_placed_secs']
+#FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'chat_count', 'dt_order_placed_secs']
+
+FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'chat_count',
+            'dt_last_bid_cancel_secs', 'dt_last_chat_secs', 'dt_last_edit_secs', 'dt_last_message_secs', 'dt_last_writer_approved_secs',
+            'dt_order_placed_secs', 'already_predicted_p2p']
 
 # DT_FEATURES = ['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_writer_approved', 'dt_last_paid_order']
 DT_FEATURES = ['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_writer_approved']
@@ -60,6 +66,9 @@ def prepare_df(features_df: pd.DataFrame) -> pd.DataFrame:
 
     features_df[DT_FEATURES] = features_df[DT_FEATURES].fillna(FILL_NA)
 
+    if 'order_created_p2p' in features_df.columns:
+        features_df.order_created_p2p = features_df.order_created_p2p.fillna(0)
+
     features_df[['{}_secs'.format(key) for key in DT_FEATURES]] = features_df[DT_FEATURES].apply(lambda x: x.dt.total_seconds())
     features_df[['dt_order_placed_secs']] = features_df[['dt_order_placed']].apply(lambda x: x.dt.total_seconds())
 
@@ -70,6 +79,18 @@ def prepare_df(features_df: pd.DataFrame) -> pd.DataFrame:
     features_df[COUNT_FEATURES] = features_df[COUNT_FEATURES].fillna(0)
     return features_df
 
+def get_additional_columns(features_df):
+    ids = features_df.index.unique()
+    orders_df = get_orders_info(ids)
+
+    if 'is_paid_order' not in features_df.columns:
+        features_df = features_df.join(orders_df.is_paid_order)
+
+    if 'order_created_p2p' not in features_df.columns:
+        features_df = features_df.join(orders_df.place2paid_proba)
+        features_df = features_df.rename(columns={"place2paid_proba": "order_created_p2p"})
+
+    return features_df
 
 def get_train_test_features(features_df: pd.DataFrame, orders_df: pd.DataFrame=None) -> tuple:
     features_df = features_df.reset_index()
@@ -77,9 +98,16 @@ def get_train_test_features(features_df: pd.DataFrame, orders_df: pd.DataFrame=N
 
     ids = features_df.index.unique()
 
-    if orders_df is None and 'is_paid_order' not in features_df.columns:
-        orders_df = get_orders_info(ids)
-        features_df = features_df.join(orders_df.is_paid_order)
+    features_df = get_additional_columns(features_df)
+    # if orders_df is None:
+    #     orders_df = get_orders_info(ids)
+    #
+    #     if 'is_paid_order' not in features_df.columns:
+    #         features_df = features_df.join(orders_df.is_paid_order)
+    #
+    #     if 'order_created_p2p' not in features_df.columns:
+    #         features_df = features_df.join(orders_df.place2paid_proba)
+    #         features_df = features_df.rename(columns={"place2paid_proba": "order_created_p2p"})
 
     features_df = prepare_df(features_df)
     # original_df_mean = orders_df.is_paid_order.mean()
@@ -188,6 +216,15 @@ class ModelSaver:
     def get_folder(self):
         return self.folder
 
+    def save_model(self, model):
+        filename = 'model.sav'
+        joblib.dump(model, '{}/{}'.format(self.folder, filename))
+
+    @staticmethod
+    def load_model(folder):
+        filename = 'model.sav'
+        return joblib.load('{}/{}'.format(folder, filename))
+
     def log(self, *args, end:str="\n") -> None:
         assert isinstance(end, str), 'end delimiter should be a string'
         with open('{}/model.info'.format(self.folder), 'a+') as f:
@@ -251,6 +288,9 @@ def evaluate_model(model: Pipeline, df_train: pd.DataFrame, df_test: pd.DataFram
     r2_test, z_test, z_abs_test = evaluate_model_by_times(df_test, saver, is_test=True)
     print(f"Test: R2: {r2_test:.5f}, z: {z_test:.5f}, z_abs: {z_abs_test:.5f}")
     saver.log(f"Test: R2: {r2_test:.5f}, z: {z_test:.5f}, z_abs: {z_abs_test:.5f}")
+
+    saver.save_model(model)
+
     return dict(
         r2_train_batch_mean=float(f"{r2:.5f}"),
         r2_train_mean=float(f"{r2_train_mean:.5f}"),
@@ -271,6 +311,7 @@ def evaluate_model(model: Pipeline, df_train: pd.DataFrame, df_test: pd.DataFram
 
 def evaluate_model_by_times(df, saver=None, is_test=False, save_frames=False) -> tuple:
     # df = df_train
+    # df = df_test
     df['is_first_client_order'] = 1
     df['is_paid'] = df.is_paid_order
 
@@ -279,15 +320,17 @@ def evaluate_model_by_times(df, saver=None, is_test=False, save_frames=False) ->
     plt_2_gif = Plt2GIF()
     z_score = 0
     z_score_abs = 0
-    r2_score = 0
+    r2_score_total = 0
 
     min_p2p_obs, min_p2p = df[['observed_p2p', 'p2p_proba']].min().values
     max_p2p_obs, max_p2p = df[['observed_p2p', 'p2p_proba']].max().values
     boundaries = (min(min_p2p_obs, min_p2p), max(max_p2p_obs, max_p2p))
 
+    chunk_size = min(df.groupby('dt_order_placed').is_paid.count().min(), 1000)
+
     for t in times:
         df_test = df[df.dt_order_placed == t]
-        df_eval = evaluate_by_chunks(df_test)
+        df_eval = evaluate_by_chunks(df_test, chunk_size)
 
         plt.cla()
         axes = plt.gca()
@@ -297,7 +340,7 @@ def evaluate_model_by_times(df, saver=None, is_test=False, save_frames=False) ->
         ax.set_title('place2paid: observed rate vs predicted proba for time {}'.format(t))
         plt_2_gif.add_image(fig)
         r2 = get_r2_coeff(df_eval)
-        r2_score += 0 if np.isnan(r2) else r2
+        r2_score_total += 0 if np.isnan(r2) else r2
         z_score += df_eval.z_score.mean()
         z_score_abs += df_eval.z_score_abs.mean()
 
@@ -312,7 +355,7 @@ def evaluate_model_by_times(df, saver=None, is_test=False, save_frames=False) ->
         if save_frames:
             plt_2_gif.save_frames('{}/3_test_qq_frames.png'.format(saver.get_folder()))
 
-    return r2_score / len(times), z_score / len(times), z_score_abs / len(times),
+    return r2_score_total / len(times), z_score / len(times), z_score_abs / len(times),
 
 
 def test_fig():
@@ -511,47 +554,89 @@ def get_dataframe_from_db(**kwargs) -> pd.DataFrame:
     df = pd.read_sql(sql=compiled_query, con=conn, params=compiled_query.params)
     df[DT_FEATURES] = df[DT_FEATURES].apply(lambda x: pd.to_timedelta(x, unit='s'))
     df.dt_order_placed = df.dt_order_placed.apply(lambda x: pd.to_timedelta(x, unit='s'))
-    return df.drop(columns=['is_paid_order'])
+    return df.drop(columns=['is_paid_order']).set_index('order_id')
+
+
+def build_graph_actions_by_order(df, model):
+    features_df = get_additional_columns(features_df)
+    features_df = prepare_df(features_df)
+    features_df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
+    order_df = features_df.loc[1540830]
+
+    mins = order_df.groupby('dt_order_placed').dt_order_placed.apply(lambda x: x.iloc[0])
+    p2p_vals = []
+
+    for dt_min in mins:
+        check_df = order_df[order_df.dt_order_placed == dt_min]
+        p2p_vals.append(model.predict_proba(check_df[FEATURES])[:, 1][0])
+
+    order_df['p2p_proba'] = p2p_vals
+    order_df.reset_index().set_index('dt_order_placed').p2p_proba.plot()
+
+    order_df[['dt_order_placed','p2p_proba']]
+
+    plt.show()
+    plt.clf()
+
 
 
 if __name__ == '__main__':
-    # features_df = pd.read_pickle('/home/andrei/Python/sqlalchemy-lab/features_df_with_web_970417.pkl')
-    # df_train, df_test = get_train_test_features(features_df)
-
     times = [0,21,31,40,49,59,68,78,89,100,111,124,137,152,167,184,200,218,236,256,278,301,326,352,380,409,440,473,510,549,591,637,688,743,802,870,943,1027,1124,1238,1372,1536,1740,2006,2370,2889,3733,5447,11782,81440]
     times = [t for i, t in enumerate(times) if i % 2 == 0]
 
-    features_df = get_dataframe_from_db(orders_limit=80000, dt_placed_orders=times)
+    features_df = get_dataframe_from_db(orders_limit=1000000, dt_placed_orders=times)
     print('Mean Order Placed DT', features_df.groupby('order_id').dt_order_placed.count().mean())
-    df_train, df_test = get_train_test_features(features_df)
 
-    model0 = train_model(df_train)
-    res0 = evaluate_model(model0, df_train, df_test)
+    ids = features_df.index.unique()
+    make_tmp_p2p_mysql_table()
+    p2pdf = get_p2p_proba_from_api_log(ids)
+    drop_tmp_p2p_mysql_table()
 
-    # FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count', 'dt_min_event_secs']
-    FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'chat_count', 'dt_min_event_secs']
-    model1 = train_model(df_train)
-    res1 = evaluate_model(model1, df_train, df_test)
+    orders_ids_with_p2p = p2pdf.index.unique()
+    order_with_p2p_df = features_df[features_df.index.isin(orders_ids_with_p2p)]
+    order_with_p2p_df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
+    order_with_p2p_df.already_predicted_p2p.mean()
 
-    # FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'paid_order_count', 'chat_count',
-    FEATURES = ['messages_count', 'edits_count', 'writer_approved_count', 'canceled_bids_count', 'chat_count',
-                'dt_last_bid_cancel_secs', 'dt_last_chat_secs', 'dt_last_edit_secs', 'dt_last_message_secs', 'dt_last_writer_approved_secs',
-                'dt_order_placed_secs']
+
+    t0_df = order_with_p2p_df[order_with_p2p_df.dt_order_placed == timedelta(seconds=0)]
+    t0_df.already_predicted_p2p.hist(bins=30)
+    plt.show()
+
+    t0_df = get_additional_columns(t0_df)
+    t0_df = prepare_df(t0_df)
+    t0_df['p2p'] = model2.predict_proba(t0_df[FEATURES])[:, 1]
+    t0_df.p2p.hist(bins=30)
+    plt.show()
+
+
+    df_train, df_test = get_train_test_features(order_with_p2p_df)
     model2 = train_model(df_train)
     res2 = evaluate_model(model2, df_train, df_test)
 
-    print('res0', res0)
-    # print('res1', res1)
     print('res2', res2)
-
-# DT_FEATURES = ['dt_last_bid_cancel', 'dt_last_chat', 'dt_last_edit', 'dt_last_message', 'dt_last_writer_approved']
-# COUNT_FEATURES = ['canceled_bids_count', 'chat_count', 'edits_count', 'messages_count', 'paid_order_count', 'writer_approved_count']
-
-
 
 '''
 res0 {'r2_train_batch_mean': 0.81297, 'r2_train_mean':  0.99287, 'mse_train_mean': 1e-05,   'r2_test_batch_mean': 0.8651,  'r2_test_mean':  0.99716, 'mse_test_mean': 0.0,     'z': 1.00203, 'z_abs': 2.33784, 'z_test':  0.43737, 'z_abs_test': 1.81293}
 res1 {'r2_train_batch_mean': 0.68198, 'r2_train_mean': -0.15158, 'mse_train_mean': 0.00111, 'r2_test_batch_mean': 0.75033, 'r2_test_mean': -0.14964, 'mse_test_mean': 0.00117, 'z': 3.85799, 'z_abs': 7.4235,  'z_test':  2.76679, 'z_abs_test': 6.28257}
 res2 {'r2_train_batch_mean': 0.83334, 'r2_train_mean':  0.98111, 'mse_train_mean': 2e-05,   'r2_test_batch_mean': 0.88143, 'r2_test_mean':  0.97767, 'mse_test_mean': 2e-05,   'z': 0.41269, 'z_abs': 2.18844, 'z_test': -0.15854, 'z_abs_test': 1.69031}
 
+with 0
+res2 {'r2_train_batch_mean': 0.95435, 'r2_train_mean': 0.9924, 'mse_train_mean': 1e-05, 'r2_test_batch_mean': 0.97974, 'r2_test_mean': 0.98875, 'mse_test_mean': 1e-05, 'z': 0.64431, 'z_abs': 2.05362, 'z_test': 0.28892, 'z_abs_test': 1.48218}
+
+only with p2p
+res2 {'r2_train_batch_mean': 0.92, 'r2_train_mean': 0.96424, 'mse_train_mean': 4e-05, 'r2_test_batch_mean': 0.0, 'r2_test_mean': 0.87332, 'mse_test_mean': 0.00016, 'z': -0.30861, 'z_abs': 0.90466, 'z_test': -0.2834, 'z_abs_test': 0.89838}
+
+with mean p2p
+res2 {'r2_train_batch_mean': 0.82821, 'r2_train_mean': 0.99438, 'mse_train_mean': 1e-05, 'r2_test_batch_mean': 0.90172, 'r2_test_mean': 0.99077, 'mse_test_mean': 1e-05, 'z': 0.643, 'z_abs': 2.3086, 'z_test': 0.4978, 'z_abs_test': 1.62826}
+
+
+
+
+# 244531 orders
+# 1781954 rows
+# model 10
+res2 {'r2_train_batch_mean': 0.99597, 'r2_train_mean': 0.9796, 'mse_train_mean': 2e-05, 'r2_test_batch_mean': 0.99664, 
+'r2_test_mean': 0.97255, 'mse_test_mean': 3e-05, 'z': 0.52526, 'z_abs': 0.94163, 'z_test': 0.57557, 'z_abs_test': 0.94617}
+  
+    
 '''
