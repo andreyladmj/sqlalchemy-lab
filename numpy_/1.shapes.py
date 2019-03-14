@@ -91,3 +91,41 @@ x = np.random.random((10,3))
 Xmean = x.mean(0)
 nx = x - Xmean
 nx.mean(0)
+
+rand = np.random.RandomState(42)
+X = rand.rand(10, 2)
+
+
+dist_sq = np.sum((X[:,np.newaxis,:] - X[np.newaxis,:,:]) ** 2, axis=-1)
+
+X[:, np.newaxis] - X[np.newaxis, :]
+dist_sq.diagonal()
+nearest = np.argsort(dist_sq, axis=1)
+K = 2
+nearest_partition = np.argpartition(dist_sq, K+1, axis=1)
+nearest_partition[:, :K+1]
+
+a = np.arange(0,10)[::-1]
+a = np.array([4,1,8,2,1,4])
+a1 = np.argpartition(a, 2)
+print(a)
+print(a1)
+
+
+tanks = np.array([
+    (5,5),
+    (7,9),
+    (10,10),
+    (3,3),
+    (3,16),
+    (14,16),
+])
+
+diff = tanks[:, np.newaxis] - tanks[np.newaxis, :]
+diff = diff ** 2
+
+np.sum(diff, axis=-1)
+dist_sq = np.sum((tanks[:, np.newaxis] - tanks[np.newaxis, :]) ** 2, axis=-1)
+K = 3
+nearest_partition = np.argpartition(dist_sq, K+1, axis=1)[:, :K+1]
+nearest_sorted = np.argsort(dist_sq, axis=1)
