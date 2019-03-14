@@ -116,8 +116,8 @@ def get_train_test_features(features_df: pd.DataFrame, orders_df: pd.DataFrame=N
 
     # add additional feature
     # features_df = features_df.reset_index().set_index(['order_id', 'dt_order_placed'])
-    features_df['dt_min_event'] = features_df[DT_FEATURES].min(axis=1)
-    features_df['dt_min_event_secs'] = features_df.dt_min_event.apply(lambda x: x.total_seconds())
+    # features_df['dt_min_event'] = features_df[DT_FEATURES].min(axis=1)
+    # features_df['dt_min_event_secs'] = features_df.dt_min_event.apply(lambda x: x.total_seconds())
     # features_df = features_df.reset_index().set_index('order_id')
 
     ids_train, ids_test = train_test_split(ids, test_size=test_size)
@@ -436,24 +436,6 @@ def build_p2p_hist_and_save_to_gif(df: pd.DataFrame, gif_name='hist_p2p_proba.gi
         plt.clf()
 
     plt_2_gif.make_gif(gif_name, duration=duration)
-    # plt_2_gif.save_frames(gif_name.replace('.git', '.png'))
-
-# def check_some_df():
-#     files = ['features_df_with_web_25000_orders_0_.pkl']
-#     files += ['features_df_with_web_25000_orders_25000.pkl']
-#     files += ['features_df_with_web_25000_orders_50000.pkl']
-#     files += ['features_df_with_web_25000_orders_75000.pkl']
-#     files += ['features_df_with_web_25000_orders_100000.pkl']
-#     files += ['features_df_with_web_25000_orders_125000.pkl']
-#     files += ['features_df_with_web_25000_orders_150000.pkl']
-#     files += ['features_df_with_web_25000_orders_175000.pkl']
-#     files += ['features_df_with_web_25000_orders_200000.pkl']
-#     files += ['features_df_with_web_19533_orders_225000.pkl']
-#
-#     for file in files:
-#         df = pd.read_pickle('/home/andrei/Python/sqlalchemy-lab/p2paid/{}'.format(file))
-#         df = df.reset_index()
-#         print(file, 735588, len(df[df.order_id == 735588]))
 
 
 def save_features(features_df:pd.DataFrame):
@@ -557,46 +539,202 @@ def get_dataframe_from_db(**kwargs) -> pd.DataFrame:
     return df.drop(columns=['is_paid_order']).set_index('order_id')
 
 
-def build_graph_actions_by_order(df, model):
-    features_df = get_additional_columns(features_df)
-    features_df = prepare_df(features_df)
-    features_df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
-    order_df = features_df.loc[1540830]
+def fill_non_exists_actions(df):
+    for col in COUNT_FEATURES:
+        if col not in df.columns:
+            df[col] = 0
 
-    mins = order_df.groupby('dt_order_placed').dt_order_placed.apply(lambda x: x.iloc[0])
+    for col in DT_FEATURES:
+        if col not in df.columns:
+            df[col] = np.NaN
+
+    return df
+
+
+def check_some_order():
+    order_id = 1530281
+    from concurent_utils import get_features
+    from utils import get_actions
+
+    info = get_orders_info([order_id]).reset_index()
+    actions = get_actions(info)
+    all_times = pd.concat((actions.dt_order_placed, pd.Series([timedelta(seconds=stime) for stime in times])))
+    all_times = all_times.sort_values(0).drop_duplicates().reset_index(drop=True)
+    order_features = pd.concat([get_features(actions, dt_order_placed) for k, dt_order_placed in all_times.iteritems()])
+
+
+def build_graph_actions_by_order(order_id, model, times, slice_by_mins=None):
+    from concurent_utils import get_features
+    from utils import get_actions
+
+    print('order_id', order_id)
+
+    info = get_orders_info([order_id]).reset_index()
+    actions = get_actions(info)
+
+    all_times = pd.concat((actions.dt_order_placed, pd.Series([timedelta(seconds=stime) for stime in times])))
+    all_times = all_times.sort_values(0).drop_duplicates().reset_index(drop=True)
+    order_features = pd.concat([get_features(actions, dt_order_placed) for k, dt_order_placed in all_times.iteritems()])
+
+    order_features['order_id'] = order_id
+    order_features = order_features.reset_index().set_index('order_id')
+    order_features = fill_non_exists_actions(order_features)
+    order_features = get_additional_columns(order_features)
+    order_features = prepare_df(order_features)
+    order_features = add_last_p2p_static_model_prediction(order_features)
+
+
+    order_features = order_features.reset_index().set_index('dt_order_placed')
+    dt_seconds = order_features.index
     p2p_vals = []
 
-    for dt_min in mins:
-        check_df = order_df[order_df.dt_order_placed == dt_min]
-        p2p_vals.append(model.predict_proba(check_df[FEATURES])[:, 1][0])
+    prev_actions_df = pd.DataFrame(columns=COUNT_FEATURES, data=[[0] * len(COUNT_FEATURES)])
+    prev_actions_df = pd.melt(prev_actions_df[COUNT_FEATURES], value_vars=COUNT_FEATURES)
 
-    order_df['p2p_proba'] = p2p_vals
-    order_df.reset_index().set_index('dt_order_placed').p2p_proba.plot()
+    for dt_second in dt_seconds:
+        check_df = order_features[order_features.index == dt_second]
+        df_melted = pd.melt(check_df[COUNT_FEATURES], value_vars=COUNT_FEATURES)
+        prediction = model.predict_proba(check_df[FEATURES])[:, 1][0]
 
-    order_df[['dt_order_placed','p2p_proba']]
+        df_melted['diff_value'] = df_melted.value - prev_actions_df.value
+        current_action = df_melted.sort_values(by='diff_value', ascending=False).iloc[0]
+        current_action_name = ''
 
+        if current_action.diff_value != 0:
+            current_action_name = current_action.variable
+
+        p2p_vals.append([prediction, current_action_name])
+        prev_actions_df = df_melted
+
+    p2p_vals = np.array(p2p_vals)
+
+    order_features['p2p_proba'] = p2p_vals[:, 0].astype(np.float32)
+    order_features['p2p_action'] = p2p_vals[:, 1]
+
+    order_features.index = order_features.index.total_seconds() / 60
+
+    if slice_by_mins:
+        sliced = order_features[order_features.index < slice_by_mins]
+    else:
+        sliced = order_features.copy()
+
+    sliced.p2p_proba.plot()
+
+    plot_styles = {'canceled_bids_count': 'ro','chat_count': 'gv',
+                        'edits_count': 'bo','messages_count': 'gv','writer_approved_count': 'r<'}
+
+    plot_dict = {'canceled_bids_count': [],'chat_count': [],
+                 'edits_count': [],'messages_count': [],'writer_approved_count': []}
+
+    for kx, ky in sliced[sliced.p2p_action != ''][['p2p_proba', 'p2p_action']].iterrows():
+        plot_dict[ky.p2p_action].append((kx, ky.p2p_proba))
+
+    for k,v in plot_dict.items():
+        if len(v):
+            points = np.array(v)
+            plt.plot(points[:, 0], points[:, 1], plot_styles[k], label=k)
+
+    plt.legend()
+    plt.title('{} order'.format(order_id))
+    # plt.grid(color='r', linestyle='-', linewidth=0.5, axis='x', alpha=0.3, ydata=sliced.index.values)
+    # plt.grid(color='r', linestyle='-', linewidth=0.5, alpha=0.3, xdata=sliced.index.values)
+
+    plt.grid(color='r', which='both', linestyle='-', linewidth=0.5, axis='x', alpha=0.3)
     plt.show()
     plt.clf()
+
+class Storage:
+    cache = {}
+
+    @classmethod
+    def save(cls, key, val):
+        cls.cache[key] = val
+
+    @classmethod
+    def load(cls, key):
+        return cls.cache[key]
+
+def load_all_p2p_df():
+    from utils import make_tmp_p2p_mysql_table, get_p2p_proba_from_api_log, drop_tmp_p2p_mysql_table
+
+    make_tmp_p2p_mysql_table()
+    p2pdf = get_p2p_proba_from_api_log()
+    drop_tmp_p2p_mysql_table()
+
+    Storage.save('p2pdf', p2pdf)
+
+
+def add_last_p2p_static_model_prediction(df, join=True):
+    if 'already_predicted_p2p' in df.columns and join:
+        return df
+
+    # df = order_features.copy()
+
+    p2pdf = Storage.load('p2pdf')
+
+    orders_ids_with_p2p = p2pdf.index.unique()
+
+    if join:
+        order_with_p2p_df = df[df.index.isin(orders_ids_with_p2p)]
+        order_with_p2p_df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
+        # df['already_predicted_p2p'] = np.NaN
+        # df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
+        return order_with_p2p_df
+
+    return p2pdf.to_frame().place2paid_proba
+
+
+
+
+
+def plot_relationship_between_p2p_predicted_and_first_p2p_by_static_model(order_with_p2p_df, model):
+
+    plt_2_gif = Plt2GIF()
+    mins = order_with_p2p_df.groupby('dt_order_placed').dt_order_placed.apply(lambda x: x.iloc[0])
+    order_with_p2p_df = get_additional_columns(order_with_p2p_df)
+    order_with_p2p_df = prepare_df(order_with_p2p_df)
+    for dt_min in mins:
+        check_df = order_with_p2p_df[order_with_p2p_df.dt_order_placed == dt_min]
+        check_df['p2p'] = model.predict_proba(check_df[FEATURES])[:, 1]
+
+        check_df[['already_predicted_p2p', 'p2p']].plot.scatter(x='p2p', y='already_predicted_p2p', linewidths=0.001)
+        plt.title(dt_min)
+        plt.plot([0,1], [0,1])
+        plt_2_gif.add_image(plt)
+        plt.clf()
+
+    plt_2_gif.make_gif('TEST_plot_relationship_between_p2p_predicted_and_first_p2p_by_static_model.gif')
+
 
 
 
 if __name__ == '__main__':
+    load_all_p2p_df()
+
     times = [0,21,31,40,49,59,68,78,89,100,111,124,137,152,167,184,200,218,236,256,278,301,326,352,380,409,440,473,510,549,591,637,688,743,802,870,943,1027,1124,1238,1372,1536,1740,2006,2370,2889,3733,5447,11782,81440]
     times = [t for i, t in enumerate(times) if i % 2 == 0]
 
     features_df = get_dataframe_from_db(orders_limit=1000000, dt_placed_orders=times)
+    features_df = add_last_p2p_static_model_prediction(features_df)
     print('Mean Order Placed DT', features_df.groupby('order_id').dt_order_placed.count().mean())
 
-    ids = features_df.index.unique()
-    make_tmp_p2p_mysql_table()
-    p2pdf = get_p2p_proba_from_api_log(ids)
-    drop_tmp_p2p_mysql_table()
+    model = ModelSaver.load_model('/home/andrei/Python/sqlalchemy-lab/models/model_13')
 
-    orders_ids_with_p2p = p2pdf.index.unique()
-    order_with_p2p_df = features_df[features_df.index.isin(orders_ids_with_p2p)]
-    order_with_p2p_df['already_predicted_p2p'] = p2pdf.to_frame().place2paid_proba
-    order_with_p2p_df.already_predicted_p2p.mean()
+    import random
+    paid_ids = features_df[features_df.is_paid_order == 1].index.unique()
+    build_graph_actions_by_order(random.choice(paid_ids), model, times)
 
+    build_graph_actions_by_order(1530281, model, times, 25)
+
+
+    order_with_p2p_df = add_last_p2p_static_model_prediction(features_df)
+
+
+    df_train, df_test = get_train_test_features(order_with_p2p_df)
+    model = train_model(df_train)
+    res = evaluate_model(model, df_train, df_test)
+
+    print('res', res)
 
     t0_df = order_with_p2p_df[order_with_p2p_df.dt_order_placed == timedelta(seconds=0)]
     t0_df.already_predicted_p2p.hist(bins=30)
@@ -604,39 +742,16 @@ if __name__ == '__main__':
 
     t0_df = get_additional_columns(t0_df)
     t0_df = prepare_df(t0_df)
-    t0_df['p2p'] = model2.predict_proba(t0_df[FEATURES])[:, 1]
+    t0_df['p2p'] = model.predict_proba(t0_df[FEATURES])[:, 1]
     t0_df.p2p.hist(bins=30)
     plt.show()
 
 
-    df_train, df_test = get_train_test_features(order_with_p2p_df)
-    model2 = train_model(df_train)
-    res2 = evaluate_model(model2, df_train, df_test)
+    plot_relationship_between_p2p_predicted_and_first_p2p_by_static_model(order_with_p2p_df, model)
 
-    print('res2', res2)
-
-'''
-res0 {'r2_train_batch_mean': 0.81297, 'r2_train_mean':  0.99287, 'mse_train_mean': 1e-05,   'r2_test_batch_mean': 0.8651,  'r2_test_mean':  0.99716, 'mse_test_mean': 0.0,     'z': 1.00203, 'z_abs': 2.33784, 'z_test':  0.43737, 'z_abs_test': 1.81293}
-res1 {'r2_train_batch_mean': 0.68198, 'r2_train_mean': -0.15158, 'mse_train_mean': 0.00111, 'r2_test_batch_mean': 0.75033, 'r2_test_mean': -0.14964, 'mse_test_mean': 0.00117, 'z': 3.85799, 'z_abs': 7.4235,  'z_test':  2.76679, 'z_abs_test': 6.28257}
-res2 {'r2_train_batch_mean': 0.83334, 'r2_train_mean':  0.98111, 'mse_train_mean': 2e-05,   'r2_test_batch_mean': 0.88143, 'r2_test_mean':  0.97767, 'mse_test_mean': 2e-05,   'z': 0.41269, 'z_abs': 2.18844, 'z_test': -0.15854, 'z_abs_test': 1.69031}
-
-with 0
-res2 {'r2_train_batch_mean': 0.95435, 'r2_train_mean': 0.9924, 'mse_train_mean': 1e-05, 'r2_test_batch_mean': 0.97974, 'r2_test_mean': 0.98875, 'mse_test_mean': 1e-05, 'z': 0.64431, 'z_abs': 2.05362, 'z_test': 0.28892, 'z_abs_test': 1.48218}
-
-only with p2p
-res2 {'r2_train_batch_mean': 0.92, 'r2_train_mean': 0.96424, 'mse_train_mean': 4e-05, 'r2_test_batch_mean': 0.0, 'r2_test_mean': 0.87332, 'mse_test_mean': 0.00016, 'z': -0.30861, 'z_abs': 0.90466, 'z_test': -0.2834, 'z_abs_test': 0.89838}
-
-with mean p2p
-res2 {'r2_train_batch_mean': 0.82821, 'r2_train_mean': 0.99438, 'mse_train_mean': 1e-05, 'r2_test_batch_mean': 0.90172, 'r2_test_mean': 0.99077, 'mse_test_mean': 1e-05, 'z': 0.643, 'z_abs': 2.3086, 'z_test': 0.4978, 'z_abs_test': 1.62826}
-
-
-
-
-# 244531 orders
-# 1781954 rows
-# model 10
-res2 {'r2_train_batch_mean': 0.99597, 'r2_train_mean': 0.9796, 'mse_train_mean': 2e-05, 'r2_test_batch_mean': 0.99664, 
-'r2_test_mean': 0.97255, 'mse_test_mean': 3e-05, 'z': 0.52526, 'z_abs': 0.94163, 'z_test': 0.57557, 'z_abs_test': 0.94617}
-  
-    
-'''
+    t0_df = order_with_p2p_df[order_with_p2p_df.dt_order_placed == timedelta(seconds=0)]
+    # t0_df[['already_predicted_p2p', 'p2p']].reset_index().set_index('already_predicted_p2p').plot.scatter()
+    t0_df[['already_predicted_p2p', 'p2p']].plot.scatter(x='p2p', y='already_predicted_p2p', linewidths=0.001, )
+    plt.plot([0,1], [0,1])
+    # np.arange(0,1,0.1)
+    plt.show()

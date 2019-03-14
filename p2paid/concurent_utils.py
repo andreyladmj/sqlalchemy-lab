@@ -12,15 +12,16 @@ times_df = None #= pd.read_pickle('/home/andrei/Python/sqlalchemy-lab/p2paid/tim
 def process_partial_df(partial_df):
     return partial_df.groupby('order_id').apply(get_order_features)
 
-def get_order_features(df):
-    paid_date = df[df.action_id == 5].dt_order_placed
+
+def get_order_features(actions_df):
+    paid_date = actions_df[actions_df.action_id == 5].dt_order_placed
     web_times = times_df.copy()
 
     if not paid_date.empty:
         paid_date = paid_date.iloc[0]
         web_times = times_df[times_df < paid_date]
 
-    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in web_times])
+    return pd.concat([get_features(actions_df, dt_order_placed) for dt_order_placed in web_times])
 
 
 def get_features(df, dt_order_placed=timedelta(minutes=1)):

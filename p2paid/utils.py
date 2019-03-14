@@ -334,7 +334,7 @@ def get_orders_info(ids):
         AND t0.is_easy_bidding = 0
         AND t0.is_first_client_order = 1
         AND order_additional.device_type_id_create = 1
-        # AND t0.order_id NOT IN (SELECT order_id FROM es_order_reassign_history)
+        AND t0.order_id NOT IN (SELECT DISTINCT order_id FROM es_order_reassign_history)
         AND t0.test_order = 0
         AND t0.site_id != 31 
         AND t0.order_id IN ({})""".format(ids)
@@ -361,10 +361,13 @@ def drop_tmp_p2p_mysql_table():
     with DBConnectionsFacade.get_edusson_ds().connect() as conn:
         conn.execute("""DROP TABLE IF EXISTS first_p2p_score;""")
 
-def get_p2p_proba_from_api_log(order_ids: list) -> pd.Series:
-    sql_query = """
-        SELECT * FROM first_p2p_score WHERE order_id IN ({});
-    """.format(','.join([str(i) for i in order_ids]))
+def get_p2p_proba_from_api_log(order_ids: list = None) -> pd.Series:
+    if order_ids and len(order_ids):
+        sql_query = """
+            SELECT * FROM first_p2p_score WHERE order_id IN ({});
+        """.format(','.join([str(i) for i in order_ids]))
+    else:
+        sql_query = """SELECT * FROM first_p2p_score;"""
 
     df = pd.read_sql(
         sql=sql_query,
