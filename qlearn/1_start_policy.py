@@ -63,9 +63,9 @@ def train_step(b_obs, b_acts, b_rews):
 
 
     # checkpoint = sess.run(action_probabilities, feed_dict=batch_feed)
-    sess.run(action_probabilities, feed_dict=batch_feed)
-    sess.run(actions, feed_dict=batch_feed)
-    sess.run(advantages, feed_dict=batch_feed)
+    sess.run(action_probabilities, feed_dict=batch_feed).shape
+    sess.run(actions, feed_dict=batch_feed).shape
+    sess.run(action_probabilities, feed_dict=batch_feed).shape
 
 def policy_rollout(env):
     observation, reward, done = env.reset(), 0, False
@@ -111,6 +111,11 @@ b_acts.extend(acts)
 
 advantages_rew = process_rewards(rews)
 b_rews.extend(advantages_rew)
+
+#29, 36
+np.array(b_obs).shape
+np.array(b_acts).shape
+np.array(b_rews).shape
 
 
 b_rews = (b_rews - np.mean(b_rews)) / (np.std(b_rews) + 1e-10)

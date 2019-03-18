@@ -128,4 +128,6 @@ np.sum(diff, axis=-1)
 dist_sq = np.sum((tanks[:, np.newaxis] - tanks[np.newaxis, :]) ** 2, axis=-1)
 K = 3
 nearest_partition = np.argpartition(dist_sq, K+1, axis=1)[:, :K+1]
-nearest_sorted = np.argsort(dist_sq, axis=1)
+nearest_sorted = np.argsort(dist_sq, axis=1)[:, :K+1]
+
+nearest_sorted[nearest_sorted[:, 0] == 5]
