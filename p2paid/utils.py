@@ -1,6 +1,8 @@
 import json
 import multiprocessing
 import os
+from collections import Iterable
+
 os.environ['DB_ENV'] = 'prod'
 from concurrent import futures
 from time import time
@@ -11,138 +13,175 @@ from sklearn.pipeline import Pipeline
 import pandas as pd
 from datetime import timedelta
 import numpy as np
-# from edusson_ds_main.db.connections import DBConnectionsFacade
-#
-# db_engine_edusson_replica = DBConnectionsFacade.get_edusson_replica()
 db_engine_edusson_replica = sqlalchemy.create_engine('mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
-# id_to_actions_count = {0: 'order_placed', 3: 'writer_approved_count', 5: 'paid_order_count', }
-# id_to_last_actions_dt = {0: 'dt_order_placed', 3: 'dt_last_writer_approved', 5: 'dt_last_paid_order'}
 
-id_to_actions_count = {0: 'order_placed', 1: 'messages_count', 2: 'edits_count', 3: 'writer_approved_count',
-                       4: 'canceled_bids_count', 5: 'paid_order_count', 6: 'chat_count'}
-id_to_last_actions_dt = {0: 'dt_order_placed', 1: 'dt_last_message', 2: 'dt_last_edit', 3: 'dt_last_writer_approved',
-                         4: 'dt_last_bid_cancel', 5: 'dt_last_paid_order', 6: 'dt_last_chat'}
+id_to_events_count = {
+    0: 'order_placed',
+    1: 'paid_order_count',
+    2: 'writer_approved_count',
+    3: 'messages_count',
+    4: 'chat_count',
+    5: 'edits_count',
+    6: 'canceled_bids_count',
+}
+id_to_last_events_dt = {
+    0: 'dt_order_placed',
+    1: 'dt_last_paid_order',
+    2: 'dt_last_writer_approved',
+    3: 'dt_last_message',
+    4: 'dt_last_chat',
+    5: 'dt_last_edit',
+    6: 'dt_last_bid_cancel',
+}
 
 
-def assign_order(x):
-    x.iloc[0] = 0
-    return x
+'''
+p2p_order_info: order_id, order_date, is_first_client_order, number_of_paid_orders_before, is_paid_order, device_type_id_create
+    estimated_total, deadline, pages_count, p2p_proba_static, dummy_has_chats_info
+
+'''
+
+def get_orders_info(ids = None):
+    where_clause = """
+        WHERE t0.order_date > '2018-01-01' 
+        AND t0.is_easy_bidding = 0
+        AND t0.test_order = 0
+        AND t0.site_id != 31
+    """
+
+    if isinstance(ids, Iterable) and not isinstance(ids, str):
+        ids = ','.join([str(order_id) for order_id in ids])
+        where_clause = "WHERE t0.order_id IN ({})".format(ids)
+
+    sql_query = f"""
+        SELECT  
+            t0.order_id,
+            order_additional.device_type_id_create,
+            
+            t0.is_first_client_order,
+            (
+                SELECT COUNT(*)
+                FROM es_orders tmp
+                WHERE tmp.customer_id = t0.customer_id
+                AND tmp.order_id < t0.order_id
+                AND tmp.is_paid_order = 1
+            ) AS number_of_paid_orders_before,
+            
+            t0.is_paid_order,
+            (
+                SELECT MIN(date_started) 
+                FROM es_orders_audit tmp
+                WHERE tmp.order_id = t0.order_id
+            ) AS date_paid
+            
+        FROM es_orders t0
+        LEFT JOIN es_orders_additional order_additional ON order_additional.order_id = t0.order_id
+        {where_clause}
+        """
+
+    return pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 
 
-def get_actions(df):
+def get_bidding_events(df):
     ids = df.order_id.unique()
 
-    sql_query = """
-    SELECT DISTINCT chat.order_id, chat_message.chat_id, chat_message.date_send FROM es_chat chat
-    LEFT JOIN es_chat_message chat_message ON chat_message.chat_id = chat.chat_id AND chat_message.user_sender_id = chat.customer_id
-    LEFT JOIN es_orders orders ON orders.order_id = chat.order_id
-    WHERE chat.order_id IN ({})
-    AND (chat_message.date_send < orders.date_started OR orders.is_paid_order = 0)
-    
-    AND chat_message.chat_id is not null
-    """.format(','.join(ids.astype(str)))
-
-    df_messages = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
-    df_messages = df_messages.rename({'date_send': 'action_date'}, axis='columns')
-    df_messages['action_id'] = 1
-
-    chats_df = df_messages.copy()
-
-    if 'chat_id' in df_messages.columns:
-        df_messages = df_messages.drop(columns=['chat_id'])
-
-    sql_query = """
-    SELECT DISTINCT order_id, order_date FROM es_orders_audit audit 
-    WHERE order_id IN ({})
-    """.format(','.join(ids.astype(str)))
-    df_edits = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
-    df_edits = df_edits.rename({'order_date': 'action_date'}, axis='columns')
-    df_edits['action_id'] = 2
-    df_edits.action_id = df_edits.groupby('order_id').action_id.transform(assign_order)
+    df_messages = get_event_messages(ids)
+    df_chat = get_event_chat_by_messages_event(df_messages)
+    df_edits = get_event_edits(ids)
+    df_bid = get_event_bid_status(ids)
 
     ###################### date writer appproved #######################################
-    df_writer_approved = df[df.date_writer_approved.notna()][['order_id', 'date_writer_approved']]
-    df_writer_approved = df_writer_approved.rename({'date_writer_approved': 'action_date'}, axis='columns')
-    df_writer_approved['action_id'] = 3
+    df_writer_approved = df_bid[df_bid.state_id == 5]
+    df_writer_approved['event_id'] = 2
     ###################### date writer appproved #######################################
 
     ####################### bids canceled ##############################################
-    sql_query = '''
-    SELECT tmp.order_id, tmp.date_state_change
-             FROM es_bids tmp
-             WHERE tmp.order_id in ({}) 
-             AND tmp.state_id=4 
-             AND tmp.bid_type_id=1
-             '''.format(','.join(ids.astype(str)))
-    df_canceled_bids = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
-    df_canceled_bids = df_canceled_bids.rename({'date_state_change': 'action_date'}, axis='columns')
-    df_canceled_bids['action_id'] = 4
+    df_canceled_bids = df_bid[df_bid.state_id == 4]
+    df_canceled_bids['event_id'] = 6
     ####################### bids canceled ##############################################
 
     ###################### date paid #######################################
     df_paid = df[df.date_paid.notna()][['order_id', 'date_paid']]
-    df_paid = df_paid.rename({'date_paid': 'action_date'}, axis='columns')
-    df_paid['action_id'] = 5
+    df_paid = df_paid.rename({'date_paid': 'event_date'}, axis='columns')
+    df_paid['event_id'] = 1
     ###################### date paid #######################################
 
-    ###################### date chat #######################################
+    df_events = pd.concat((df_messages, df_edits, df_writer_approved, df_canceled_bids, df_paid, df_chat))
+    df_events = df_events.sort_values(['order_id', 'event_date'])
+    df_events = df_events.reset_index(drop=True)
+    df_events['dt_order_placed'] = df_events.groupby('order_id').event_date.apply(lambda x: x - x.min())
 
-    if not chats_df.empty:
-        chats_df = chats_df.groupby(['order_id', 'chat_id']).action_date.min().to_frame()
-
-        # chat_id can be None (fixed by sql where clause)
-        # if not chats_df.empty:
-        chats_df.reset_index(inplace=True)
-        chats_df = chats_df.drop(columns=['chat_id'])
-        chats_df['action_id'] = 6
-    ###################### date chat #######################################
-
-    df_actions = pd.concat((df_messages, df_edits, df_writer_approved, df_canceled_bids, df_paid, chats_df))
-    df_actions = df_actions.reset_index(drop=True)
-    df_actions = df_actions.sort_values('action_date')
-    df_actions['dt_order_placed'] = df_actions.groupby('order_id').action_date.apply(lambda x: x - x.min())
-
-    df_actions = df_actions[df_actions.action_id.isin(list(id_to_actions_count.keys()))].copy()
-
-    return df_actions
+    cols = ['order_id', 'event_id', 'event_date', 'dt_order_placed']
+    return df_events[cols]
 
 
-def get_features_from_actions(df):
-    return df.groupby('order_id').apply(get_order_features)
+def get_event_messages(ids):
+    sql_query = """
+    SELECT chat.order_id, chat_message.chat_id, chat_message.date_send AS event_date
+    FROM es_chat_message chat_message
+    JOIN es_chat chat ON chat_message.chat_id = chat.chat_id
+    JOIN es_orders orders ON orders.order_id = chat.order_id
+    JOIN (
+        SELECT order_id, MAX(is_paid_order) as is_paid_order, MIN(date_started) AS date_started 
+        FROM es_orders_audit
+        WHERE order_id IN ({order_ids})
+        GROUP BY order_id
+    ) audit ON audit.order_id = chat.order_id
+    
+    WHERE chat.order_id IN ({order_ids})
+        AND chat_message.user_sender_id = chat.customer_id
+        AND (audit.is_paid_order = 0 OR chat_message.date_send < audit.date_started)
+    """.format(order_ids=','.join(ids.astype(str)))
 
-# def get_features_from_actions(df):
-#     return apply_by_multiprocessing(df.groupby('order_id'), get_order_features, workers=4)
+    df_messages = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
+    df_messages['event_id'] = 3
+    return df_messages
 
+def get_event_edits(ids):
+    sql_query = """
+    SELECT DISTINCT order_id, order_date AS event_date 
+    FROM es_orders_audit audit 
+    WHERE order_id IN ({})
+        AND is_paid_order = 0
+    """.format(','.join(ids.astype(str)))
+    df_edits = pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
+    df_edits['event_id'] = 5
 
+    def assign_order_created_event(x):
+        x.iloc[0] = 0
+        return x
 
-def get_order_features(df):
-    return pd.concat([get_features(df, dt_order_placed) for dt_order_placed in df.dt_order_placed])
+    df_edits.event_id = df_edits.groupby('order_id').event_id.transform(assign_order_created_event)
+    return df_edits
 
-# def get_order_features(df):
-#     with futures.ProcessPoolExecutor() as pool:
-#         times = [dt_order_placed for dt_order_placed in df.dt_order_placed]
-#         res = pool.map(get_features, [df] * len(times), times, chunksize=100)
-#     return pd.concat(res)
+def get_event_bid_status(ids):
+    sql_query = '''
+    SELECT bids.order_id, bids.date_state_change AS event_date, bids.state_id
+    FROM es_bids_audit bids
+    JOIN (
+        SELECT order_id, MAX(is_paid_order) as is_paid_order, MIN(date_started) AS date_started 
+        FROM es_orders_audit
+        WHERE order_id IN ({order_ids})
+        GROUP BY order_id
+    ) audit ON audit.order_id = bids.order_id
+    WHERE bids.order_id in ({order_ids}) 
+        AND bids.state_id IN (4,5)
+        AND bids.bid_type_id = 1
+        AND (audit.is_paid_order = 0 OR bids.date_create < audit.date_started)
+    '''.format(order_ids=','.join(ids.astype(str)))
+    return pd.read_sql(sql=sql_query, con=db_engine_edusson_replica)
 
+def get_event_chat_by_messages_event(df_messages):
+    df_chat = df_messages.copy()
+    if not df_chat.empty:
+        df_chat = df_chat.groupby(['order_id', 'chat_id']).event_date.min().to_frame()
+        df_chat.reset_index(inplace=True)
+        df_chat = df_chat.drop(columns=['chat_id'])
+        df_chat['event_id'] = 4
 
-# name_features = apply_by_multiprocessing(df.tokenized_name,
-#                                          make_categorical_features,
-#                                          workers=4)
+    return df_chat
 
-
-def _apply_df(args):
-    df, func, kwargs = args
-    return df.apply(func, **kwargs)
-
-
-def apply_by_multiprocessing(df, func, **kwargs):
-    workers = kwargs.pop('workers')
-    pool = multiprocessing.Pool(processes=workers)
-    result = pool.map(_apply_df, [(d, func, kwargs)
-                                  for d in np.array_split(df, workers)])
-    pool.close()
-    return pd.concat(list(result))
 
 
 
@@ -314,32 +353,6 @@ class OnlinePipeline(Pipeline):
 
 
 
-
-def get_orders_info(ids):
-    ids = ','.join([str(order_id) for order_id in ids])
-
-    sql_query = """
-        SELECT  
-            t0.order_id,
-            t0.is_paid_order,
-            t0.date_started AS date_paid,
-            bids.date_state_change AS date_writer_approved,
-            order_additional.smart_bidding_place2paid AS place2paid_proba
-            
-        FROM es_orders t0
-        LEFT JOIN es_orders_additional order_additional ON order_additional.order_id = t0.order_id
-        LEFT JOIN es_bids bids ON bids.order_id = t0.order_id AND bids.state_id = 5 AND bid_type_id = 1
-        
-        WHERE t0.order_date > '2018-01-01' 
-        AND t0.is_easy_bidding = 0
-        AND t0.is_first_client_order = 1
-        AND order_additional.device_type_id_create = 1
-        AND t0.order_id NOT IN (SELECT DISTINCT order_id FROM es_order_reassign_history)
-        AND t0.test_order = 0
-        AND t0.site_id != 31 
-        AND t0.order_id IN ({})""".format(ids)
-
-    return pd.read_sql(sql=sql_query, con=db_engine_edusson_replica).drop_duplicates('order_id').set_index('order_id')
 
 
 def make_tmp_p2p_mysql_table():
