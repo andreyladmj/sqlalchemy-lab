@@ -28,7 +28,7 @@ hidden1 = tf.contrib.layers.fully_connected(
 
 logits = tf.contrib.layers.fully_connected(
     inputs=hidden1,
-    num_outputs=output_size,
+    num_outputs=output_size + 3,
     activation_fn=None
 )
 
@@ -53,6 +53,14 @@ _train = optimizer.minimize(loss)
 # sess.run(logits, feed_dict={input: [observation]})
 
 def act(observation):
+   sess.run(logits, feed_dict={input: [observation]})
+   batch_feed = {input: b_obs, \
+                 actions: b_acts, \
+                 advantages: b_rews }
+
+   for i in range(100):
+        print(sess.run(tf.reshape(tf.multinomial(logits, 1), []), feed_dict={input: [observation]}))
+        print(sess.run(action_probabilities, feed_dict={input: [observation]}))
    return sess.run(random_action, feed_dict={input: [observation]})
 
 def train_step(b_obs, b_acts, b_rews):

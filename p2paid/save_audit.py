@@ -25,8 +25,6 @@ GROUP BY order_id, order_date;
 """
 
 start_date = datetime(year=2016, month=1, day=1)
-db_engine_edusson_replica = sqlalchemy.create_engine(
-    'mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
 
 def save_audit_data_by_month(start_date):
