@@ -36,6 +36,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
 os.environ['DB_ENV'] = 'prod'
+from edusson_ds_main.db.connections import DBConnectionsFacade
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,8 @@ pd.set_option('display.line_width', 2000)
 
 df0 = get_orders_info()
 df = df0.copy()
+
+
 
 # jjj = df.sort_values('date_paid')[:100]
 # get_bidding_events(df[df.order_id == 627476])
@@ -80,11 +83,22 @@ df = df0.copy()
 
 
 
+df_events[df_events.event_date < '2019-03-17 16:18:28.639058'].groupby('order_id').event_id.value_counts().loc[1490018]
+df_events[df_events.event_date < '2019-02-17 16:18:28.639058'].groupby(['order_id', 'event_id']).count()
+
+df_events[df_events.order_id == 1490018].groupby('order_id').event_id.apply(lambda x: x.value_counts())
+
+
+df_events.groupby('order_id').event_id.value_counts()
+
+df_events[df_events.order_id == 1490024].event_id.value_counts()
+
 
 print('Start calc times_df')
 times_count = 101
 df_events = pd.concat([get_bidding_events(part_df) for part_df in np.array_split(df, 4)])
 df_events.to_pickle('all_events.pkl')
+# df_events = pd.read_pickle('all_events.pkl')
 times_df = df_events[df_events.dt_order_placed != timedelta(seconds=0)].dt_order_placed.quantile(q=np.linspace(0, 1, times_count))
 times_df = times_df.reset_index()[:times_count-1].dt_order_placed
 times_df.iloc[0] = timedelta()
@@ -93,6 +107,20 @@ times_df.to_pickle('times_df_for_all_events.pkl')
 # times_df = pd.read_pickle('times_df_for_all_events.pkl')
 concurent_utils.times_df = times_df
 print('Done times_df')
+
+
+print('Save Events to db')
+stime = time()
+df_events.index = range(1, len(df_events) + 1)
+df_events.index.name = 'id'
+df_events.dt_order_placed = df_events.dt_order_placed.apply(lambda x: x.total_seconds())
+# df_events.to_sql('p2p_order_bidding_event', con=DBConnectionsFacade().get_edusson_ds(), if_exists='append')
+
+df_events
+df_events.order_id.nunique()
+
+print('Finish', time()-stime)
+
 
 size = 25000
 for iteration, i in enumerate(range(0, len(df0), size)):
