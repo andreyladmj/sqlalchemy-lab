@@ -13,7 +13,6 @@ from sklearn.pipeline import Pipeline
 import pandas as pd
 from datetime import timedelta
 import numpy as np
-db_engine_edusson_replica = sqlalchemy.create_engine('mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
 
 id_to_events_count = {

@@ -48,7 +48,6 @@ import concurent_utils
 
 
 #db_engine_edusson_replica = DBConnectionsFacade.get_edusson_replica()
-db_engine_edusson_replica = sqlalchemy.create_engine('mysql+pymysql://code_select:9_4vdmIedhP@edusson-db-replica-2xlarge.cgyy1w9v9yq6.us-east-1.rds.amazonaws.com/edusson')
 
 pd.set_option('display.height', 1000)
 pd.set_option('display.max_rows', 50)
