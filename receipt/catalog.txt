@@ -102,14 +102,14 @@ recipe/group/1837/pirogi-s-yablokami-yablochnyj-pirog
 /recipe/group/2628/prazdnichnye-torty
 /recipe/group/3573/tort-ptiche-moloko
 /recipe/group/2995/tort-medovik
-https://www.gastronom.ru/recipe/group/2808/tort-muravejnik
+/recipe/group/2808/tort-muravejnik
 /recipe/group/2749/tort-praga-i-tort-zaher
 /recipe/group/2657/nizkokalorijnye-torty
 /recipe/group/2658/yagodnye-torty
 /recipe/group/1665/tiramisu
 /recipe/group/2986/blinnye-torty
 /recipe/group/3125/torty-dlya-detej-detskie-torty
-recipe/group/1211/torty-morozhenoe
+/recipe/group/1211/torty-morozhenoe
 /recipe/group/3092/vypechka-s-morkovyu-morkovnyj-tort-morkovnyj-pirog
 /recipe/group/3647/tort-pavlova
 /recipe/group/1128/profitroli
@@ -201,7 +201,7 @@ https://www.gastronom.ru/recipe/group/1579/karbonara
 /recipe/group/2487/zagotovki-iz-perca-perec-konservirovannyj
 /recipe/group/2533/marinovannye-ovoshchi-frukty-yagody-zelen-syr-yajca-shpekachki
 /recipe/group/2960/zagotovki-iz-svekly
-recipe/group/2855/klubnichnoe-varene
+/recipe/group/2855/klubnichnoe-varene
 /recipe/group/2410/varene-iz-chereshni
 /recipe/group/2879/yablochnoe-varene
 /recipe/group/2409/abrikosovoe-varene-dzhem
@@ -237,7 +237,7 @@ recipe/group/2855/klubnichnoe-varene
 /recipe/group/1015/novogodnie-salaty-2017
 /recipe/group/2115/zalivnoe-recepty
 /recipe/group/2116/salat-olive
-https://www.gastronom.ru/recipe/group/3564/prazdnichnye-bljuda-iz-svininy
+/recipe/group/3564/prazdnichnye-bljuda-iz-svininy
 /recipe/group/3562/prazdnichnye-bljuda-iz-kuricy
 /recipe/group/1011/goryachie-blyuda-iz-ryby-k-novogodnemu-stolu
 /recipe/group/2628/prazdnichnye-torty
