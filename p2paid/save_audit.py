@@ -11,6 +11,7 @@ from edusson_ds_main.db.connections import DBConnectionsFacade
 sql = """
 SELECT
     order_id,
+    rev,
     order_date,
     deadline,
     estimated_total,
@@ -31,8 +32,8 @@ def save_audit_data_by_month(start_date):
     to_date = (start_date + relativedelta(months=1)).strftime('%Y-%m-%d')
     from_date = start_date.strftime('%Y-%m-%d')
     stime = time()
-    df = pd.read_sql(sql=sql.format(from_date, to_date), con=db_engine_edusson_replica)
-    df.to_pickle('/home/andrei/Python/sqlalchemy-lab/p2paid/audit_data/{}-{}.{}.pkl'.format(from_date, to_date, len(df)))
+    df = pd.read_sql(sql=sql.format(from_date, to_date), con=DBConnectionsFacade.get_edusson_replica())
+    df.to_pickle('/home/andrei/Python/sqlalchemy-lab/p2paid/audit_data2/{}-{}.{}.pkl'.format(from_date, to_date, len(df)))
     print("From {} to {} len: {}, time: {}".format(from_date, to_date, len(df), time()-stime))
 
 
