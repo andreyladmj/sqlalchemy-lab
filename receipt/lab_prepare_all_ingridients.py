@@ -46,6 +46,16 @@ df.name_ing = df.name_ing.apply(lambda x: x.lower())
 
 uniq_ings = df.groupby('name_ing').name_ing.count().sort_values()
 
+
+#uniq_ings['df_id'] = uniq_ings[:10].name.apply(lambda name: df[df.name_ing == name].index.value)
+# uniq_ings['df_id'] = uniq_ings.name.apply(lambda name: df[df.name_ing == name].index.values[0])
+df['ing_id'] = df.name_ing.apply(lambda name: uniq_ings[uniq_ings.name == name].index.values[0])
+
+# for i, part in enumerate(np.array_split(df, 6)):
+#     part.to_pickle('receipt/df_part_{}.pkl'.format(i))
+#
+# uniq_ings.to_pickle('receipt/df_uniq_ings.pkl')
+
 uniq_ings = uniq_ings.to_frame('count').reset_index().rename(columns={'name_ing':'name'})
 uniq_ings.index.name = 'id'
 
