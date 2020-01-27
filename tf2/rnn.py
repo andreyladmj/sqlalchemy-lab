@@ -1,3 +1,5 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 import tensorflow as tf
 from tensorflow import keras
 import matplotlib.pyplot as plt
@@ -7,6 +9,16 @@ import seaborn as sns
 
 # https://learning.oreilly.com/videos/implementing-deep-learning/9781789950496/9781789950496-video4_2
 # https://learning.oreilly.com/library/view/neural-networks-and/9781492037354/ch04.html#idm139624960157312 interesting
+# https://learning.oreilly.com/videos/python-fundamentals/9780135917411
+
+# https://learning.oreilly.com/library/view/foundations-of-deep/9780135172490/ch01.xhtml#ch01_1 - REINFORCEMENT
+# https://learning.oreilly.com/library/view/natural-language-processing/9781789130386/ - TEXT CLASSSIFICATION !!!!!!!!!!!!!!!!!!!!!!!
+
+
+# RECURRENT
+# https://learning.oreilly.com/library/view/natural-language-processing/9781617294631/kindle_split_019.html#ch08lev1sec1
+# https://learning.oreilly.com/library/view/deep-learning-from/9781492041405/
+# https://learning.oreilly.com/library/view/machine-learning-for/9781789136364/ch04s14.html LSTM
 
 df_date = pd.read_csv("D:\datasets\GOOGL.csv")
 
@@ -134,3 +146,21 @@ words = sorted(counts, key=counts.get, reverse=True)
 vocab_size=len(words)
 word_to_int = {word: i for i, word in enumerate(words, 1)}
 ###############################################
+
+
+
+from keras.layers import SimpleRNN
+
+model = Sequential()
+model.add(SimpleRNN(16,return_sequences=True,input_shape=(max_len,n_features)))
+model.add(SimpleRNN(32, return_sequences = True))
+model.add(SimpleRNN(64))
+model.add(Dense(1))
+
+# or you can use model.add(Flatten())
+
+model.compile(optimizer='adam',loss='mean_absolute_percentage_error')
+
+You can then fit the model on the generator as before:
+
+model.fit_generator(train_gen,epochs=20,steps_per_epoch=n_train_samples // batch_size, validation_data= val_gen, validation_steps=n_val_samples // batch_size)
