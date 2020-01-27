@@ -6,6 +6,7 @@ import pandas as pd
 import seaborn as sns
 
 # https://learning.oreilly.com/videos/implementing-deep-learning/9781789950496/9781789950496-video4_2
+# https://learning.oreilly.com/library/view/neural-networks-and/9781492037354/ch04.html#idm139624960157312 interesting
 
 df_date = pd.read_csv("D:\datasets\GOOGL.csv")
 
