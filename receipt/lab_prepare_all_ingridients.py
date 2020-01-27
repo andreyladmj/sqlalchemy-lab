@@ -38,12 +38,70 @@ df_receipts = pd.concat([pd.read_pickle('receipt/df_receipts_part_{}.pkl'.format
 
 df = df_ingredients.join(df_receipts, on='receipt_id', lsuffix='_ing').set_index('id')
 df.type.unique()
-df[df.type == 'ivona'].name_ing.unique()
-# df.loc[df.type == 'ivona', 'full_name'] = df[df.type == 'ivona'].name_ing
-
-
-df[df.type == 'ivona'].groupby('name_ing').name_ing.count().sort_values()
-
+# df[df.type == 'ivona'].name_ing.unique()
+#
+# df[df.type == 'ivona'].groupby('name_ing').name_ing.count().sort_values()
+#
 # others = df[df.type != 'ivona'].name_ing.apply(lambda x: x.split(' – ')[0]).apply(lambda x: x.split('—')[0])
-others = df.name_ing.apply(lambda x: x.split(' – ')[0]).apply(lambda x: x.split('—')[0].strip().lower())
-others.to_frame('name_ing').groupby('name_ing').name_ing.count().sort_values()
+df.loc[df.type != 'ivona', 'name_ing'] = df[df.type != 'ivona'].name_ing.apply(lambda x: x.split(' – ')[0]).apply(lambda x: x.split('—')[0])
+
+df.name_ing = df.name_ing.apply(lambda x: x.lower())
+
+uniq_ings = df.groupby('name_ing').name_ing.count().sort_values()
+
+
+#uniq_ings['df_id'] = uniq_ings[:10].name.apply(lambda name: df[df.name_ing == name].index.value)
+# uniq_ings['df_id'] = uniq_ings.name.apply(lambda name: df[df.name_ing == name].index.values[0])
+df['ing_id'] = df.name_ing.apply(lambda name: uniq_ings[uniq_ings.name == name].index.values[0])
+
+# for i, part in enumerate(np.array_split(df, 6)):
+#     part.to_pickle('receipt/df_part_{}.pkl'.format(i))
+#
+# uniq_ings.to_pickle('receipt/df_uniq_ings.pkl')
+
+uniq_ings = uniq_ings.to_frame('count').reset_index().rename(columns={'name_ing':'name'})
+uniq_ings.index.name = 'id'
+
+# df = df[:10000]
+#
+# i = 0
+# def trr(x):
+#     global i
+#     v = uniq_ings[uniq_ings.name == x].index
+#     print(i, x, v)
+#     i += 1
+#     return v
+#
+# df['ing_index'] = df.name_ing.apply(trr)
+
+
+
+
+
+
+# uu = df.join(uniq_ings, on='name')
+
+uniq_ings['ing'] = ''
+uniq_ings.loc[uniq_ings.name.str.contains("лук"), 'ing'] = 'лук'
+uniq_ings.loc[uniq_ings.name.str.contains("яйц"), 'ing'] = 'яйцо'
+uniq_ings.loc[(uniq_ings.name.str.contains("кунжут")) & (uniq_ings.name.str.contains("масл")), 'ing'] = 'кунжутное масло'
+uniq_ings.loc[(uniq_ings.name.str.contains("оливков")) & (uniq_ings.name.str.contains("масл")), 'ing'] = 'оливковое масло'
+uniq_ings.loc[(uniq_ings.name.str.contains("растит")) & (uniq_ings.name.str.contains("масл")), 'ing'] = 'растительное масло'
+uniq_ings.loc[(uniq_ings.name.str.contains("сливоч")) & (uniq_ings.name.str.contains("масл")), 'ing'] = 'сливочное масло'
+uniq_ings.loc[(uniq_ings.name.str.contains("подсолн")) & (uniq_ings.name.str.contains("масл")), 'ing'] = 'подсолнечное масло'
+uniq_ings.loc[uniq_ings.name.str.contains("молок"), 'ing'] = 'молоко'
+uniq_ings.loc[(uniq_ings.name.str.contains("сгущен")) & (uniq_ings.name.str.contains("молок")), 'ing'] = 'cгущённое молоко'
+uniq_ings.loc[(uniq_ings.name.str.contains("сгущён")) & (uniq_ings.name.str.contains("молок")), 'ing'] = 'cгущённое молоко'
+uniq_ings.loc[uniq_ings.name.str.contains("сметан"), 'ing'] = 'сметана'
+uniq_ings.loc[uniq_ings.name.str.contains("сахар"), 'ing'] = 'сахар'
+uniq_ings.loc[(uniq_ings.name.str.contains("ваниль")) & (uniq_ings.name.str.contains("сахар")), 'ing'] = 'ванильный сахар'
+uniq_ings.loc[uniq_ings.name.str.contains("картоф"), 'ing'] = 'картофель'
+uniq_ings.loc[uniq_ings.name.str.contains("морковь"), 'ing'] = 'морковь'
+uniq_ings.loc[uniq_ings.name.str.contains("мука"), 'ing'] = 'мука'
+uniq_ings.loc[uniq_ings.name.str.contains("лимон"), 'ing'] = 'лимон'
+uniq_ings.loc[(uniq_ings.name.str.contains("сок")) & (uniq_ings.name.str.contains("лимон")), 'ing'] = 'лимонный сок'
+
+uniq_ings[uniq_ings.name.str.contains("рис")]
+# uniq_ings[uniq_ings.name.str.contains("майонез")]
+
+uniq_ings.to_sql('unique_ingredients', con=conn, if_exists='append')
